@@ -36,4 +36,9 @@ void singleThreadTest(char* toWrite) {
 
 	text.Close(file2);
 	text.Close(file3);
+
+	delete file1;
+	delete file2;
+	delete file3;
+	delete readTo;
 }
