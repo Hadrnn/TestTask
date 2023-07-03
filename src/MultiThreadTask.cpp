@@ -1,3 +1,4 @@
+// -*- coding: utf-8 -*-
 #include "MultiThreadTask.h"
 #include "TextFS.h"
 #include <iostream>

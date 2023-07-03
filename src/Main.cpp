@@ -1,4 +1,5 @@
-﻿#include <iostream>
+﻿// -*- coding: utf-8 -*-
+#include <iostream>
 #include "TextFS.h"
 #include "MultiThreadTask.h"
 #include "SingleThreadTask.h"

@@ -1,3 +1,4 @@
+// -*- coding: utf-8 -*-
 #pragma once
 
 #include "TestTask.h"

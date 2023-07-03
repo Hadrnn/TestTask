@@ -1,3 +1,4 @@
+// -*- coding: utf-8 -*-
 #include "TextFS.h"
 #include <iostream>
 #include <fstream>
