@@ -1,10 +1,9 @@
-// -*- coding: utf-8 -*-
-#include "MultiThreadTask.h"
+п»ї#include "MultiThreadTask.h"
 #include "TextFS.h"
 #include <iostream>
 
 void multiThreadTest() {
-	// два из трех потоков будут работать с одной пачкой
+	// РґРІР° РёР· С‚СЂРµС… РїРѕС‚РѕРєРѕРІ Р±СѓРґСѓС‚ СЂР°Р±РѕС‚Р°С‚СЊ СЃ РѕРґРЅРѕР№ РїР°С‡РєРѕР№
 	char thread1FileName[] = "C:/test1/test2/test5.txt\0";
 	char thread2FileName[] = "C:/test1/test2/test6.txt\0";
 	char thread3FileName[] = "C:/test1/test2/test7.txt\0";
@@ -35,10 +34,10 @@ void threadTask1(char toWrite, int threadNumber, char* filePath) {
 
 	for (int i = 0; i < 15; ++i) {
 		if (text.Write(myFile, &toWrite, 1) == 1) {
-			std::cout << "Thread " + std::to_string(threadNumber) + " put a symbol\n"; // тк defaultFileOffset = 10 мы сможем записать только 10 символов
+			std::cout << "Thread " + std::to_string(threadNumber) + " put a symbol\n"; // С‚Рє defaultFileOffset = 10 РјС‹ СЃРјРѕР¶РµРј Р·Р°РїРёСЃР°С‚СЊ С‚РѕР»СЊРєРѕ 10 СЃРёРјРІРѕР»РѕРІ
 		}
 		else {
-			std::cout << "Thread " + std::to_string(threadNumber) + " couldnt put a symbol\n"; // и получим 5 таких сообщений на каждый поток
+			std::cout << "Thread " + std::to_string(threadNumber) + " couldnt put a symbol\n"; // Рё РїРѕР»СѓС‡РёРј 5 С‚Р°РєРёС… СЃРѕРѕР±С‰РµРЅРёР№ РЅР° РєР°Р¶РґС‹Р№ РїРѕС‚РѕРє
 		}
 	}
 
@@ -54,10 +53,10 @@ void threadTask2(int threadNumber, char* filePath) {
 	for (int i = 0; i < 15; ++i) {
 		int x = 0;
 		if (text.Read(myFile, toRead, 1) == 1) {
-			std::cout << "Thread " + std::to_string(threadNumber) + " read a symbol: " + toRead + '\n'; // тк defaultFileOffset = 10 мы сможем прочитать только 10 символов
+			std::cout << "Thread " + std::to_string(threadNumber) + " read a symbol: " + toRead + '\n'; // С‚Рє defaultFileOffset = 10 РјС‹ СЃРјРѕР¶РµРј РїСЂРѕС‡РёС‚Р°С‚СЊ С‚РѕР»СЊРєРѕ 10 СЃРёРјРІРѕР»РѕРІ
 		}
 		else {
-			std::cout << "Thread " + std::to_string(threadNumber) + " couldnt read a symbol\n"; // и получим 5 таких сообщений на каждый поток
+			std::cout << "Thread " + std::to_string(threadNumber) + " couldnt read a symbol\n"; // Рё РїРѕР»СѓС‡РёРј 5 С‚Р°РєРёС… СЃРѕРѕР±С‰РµРЅРёР№ РЅР° РєР°Р¶РґС‹Р№ РїРѕС‚РѕРє
 		}
 	}
 

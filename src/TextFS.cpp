@@ -1,5 +1,4 @@
-// -*- coding: utf-8 -*-
-#include "TextFS.h"
+п»ї#include "TextFS.h"
 #include <iostream>
 #include <fstream>
 #include <exception>
@@ -7,22 +6,22 @@
 TestTask::File* TestTask::textFS::Open(const char* name) {
 
 	std::lock_guard<std::mutex> lock(TestTask::mapAccess);
-	// блокируем открытие/создание/закрытие файлов
+	// Р±Р»РѕРєРёСЂСѓРµРј РѕС‚РєСЂС‹С‚РёРµ/СЃРѕР·РґР°РЅРёРµ/Р·Р°РєСЂС‹С‚РёРµ С„Р°Р№Р»РѕРІ
 
-	std::string filePath(name); // string содержащий "фиктивный" путь к файлу
+	std::string filePath(name); // string СЃРѕРґРµСЂР¶Р°С‰РёР№ "С„РёРєС‚РёРІРЅС‹Р№" РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
 
-	if (TestTask::writeOnlyFiles.contains(filePath)) { // если открыт в writeOnly режиме - выходим
+	if (TestTask::writeOnlyFiles.contains(filePath)) { // РµСЃР»Рё РѕС‚РєСЂС‹С‚ РІ writeOnly СЂРµР¶РёРјРµ - РІС‹С…РѕРґРёРј
 		std::cerr << "Didnt open a file in read only mode since it was already opened in write only mode\n";
 		return nullptr;
 	}
 
-	std::filesystem::path directoryPath = std::filesystem::path(filePath).parent_path(); //путь к директории к файлу
-	std::filesystem::path headerPath = directoryPath / headerFileName; // путь к header 
-	std::string fileName = std::filesystem::path(filePath).filename().string(); // имя самого файла
+	std::filesystem::path directoryPath = std::filesystem::path(filePath).parent_path(); //РїСѓС‚СЊ Рє РґРёСЂРµРєС‚РѕСЂРёРё Рє С„Р°Р№Р»Сѓ
+	std::filesystem::path headerPath = directoryPath / headerFileName; // РїСѓС‚СЊ Рє header 
+	std::string fileName = std::filesystem::path(filePath).filename().string(); // РёРјСЏ СЃР°РјРѕРіРѕ С„Р°Р№Р»Р°
 
 	std::ifstream header;
 	header.open(headerPath);
-	if (!header.good() || !std::filesystem::exists(headerPath)) { // нет header - значит нет и файла (выходим); проблемы с ним - выходим
+	if (!header.good() || !std::filesystem::exists(headerPath)) { // РЅРµС‚ header - Р·РЅР°С‡РёС‚ РЅРµС‚ Рё С„Р°Р№Р»Р° (РІС‹С…РѕРґРёРј); РїСЂРѕР±Р»РµРјС‹ СЃ РЅРёРј - РІС‹С…РѕРґРёРј
 		header.close();
 		std::cerr << "Couldnt find header while trying to open a file\n";
 		return nullptr;
@@ -32,13 +31,13 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 	size_t filesPerPack = 0;
 	size_t fileOffset = 0;
 
-	try { // читаем информацию о VFS из header: максимальное количество файлов в одной пачке и максимальное количество символов на файл
+	try { // С‡РёС‚Р°РµРј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ VFS РёР· header: РјР°РєСЃРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ РІ РѕРґРЅРѕР№ РїР°С‡РєРµ Рё РјР°РєСЃРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ СЃРёРјРІРѕР»РѕРІ РЅР° С„Р°Р№Р»
 		std::getline(header, buff);
 		filesPerPack = stoi(buff);
 		std::getline(header, buff);
 		fileOffset = stoi(buff);
 	}
-	catch (const std::exception&) { // не смогли прочитать
+	catch (const std::exception&) { // РЅРµ СЃРјРѕРіР»Рё РїСЂРѕС‡РёС‚Р°С‚СЊ
 		std::cerr << "Error while working with header\n";
 		header.close();
 		return nullptr;
@@ -47,7 +46,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 	size_t currFilePosition = 0;
 	bool didntFind = true;
 
-	while (std::getline(header, buff)) { // ищем нужный файл в header
+	while (std::getline(header, buff)) { // РёС‰РµРј РЅСѓР¶РЅС‹Р№ С„Р°Р№Р» РІ header
 		if (buff == fileName) {
 			didntFind = false;
 			break;
@@ -55,7 +54,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 		++currFilePosition;
 	}
 
-	if (didntFind) { // в header нет файла - значит его нет в VFS (выходим)
+	if (didntFind) { // РІ header РЅРµС‚ С„Р°Р№Р»Р° - Р·РЅР°С‡РёС‚ РµРіРѕ РЅРµС‚ РІ VFS (РІС‹С…РѕРґРёРј)
 		header.close();
 		std::cerr << "Didnt find a file in VFS\n";
 		return nullptr;
@@ -64,7 +63,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 	size_t packNumber = currFilePosition / filesPerPack;
 	currFilePosition %= filesPerPack;
 
-	File* file = new File; // создаем File
+	File* file = new File; // СЃРѕР·РґР°РµРј File
 	file->filePath = filePath;
 	file->fileOffset = fileOffset;
 	file->filePosition = currFilePosition;
@@ -74,7 +73,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 	std::fstream testStream;
 	testStream.open(file->packFileName, std::ios::in | std::ios::out | std::ios::ate);
 
-	if (testStream.good()) { // для проверки открываем .dat файл (пачку)
+	if (testStream.good()) { // РґР»СЏ РїСЂРѕРІРµСЂРєРё РѕС‚РєСЂС‹РІР°РµРј .dat С„Р°Р№Р» (РїР°С‡РєСѓ)
 		if (TestTask::readOnlyFiles.contains(filePath)) {
 			++TestTask::readOnlyFiles[filePath];
 		}
@@ -85,7 +84,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 		return file;
 	}
 	else {
-		// если возникли какие-то ошибки с .dat файлом
+		// РµСЃР»Рё РІРѕР·РЅРёРєР»Рё РєР°РєРёРµ-С‚Рѕ РѕС€РёР±РєРё СЃ .dat С„Р°Р№Р»РѕРј
 		testStream.close();
 		std::cerr << "Error while working with pack\n";
 		delete file;
@@ -96,28 +95,28 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 TestTask::File* TestTask::textFS::Create(const char* name) {
 
 	std::lock_guard<std::mutex> lock(TestTask::mapAccess);
-	// блокируем открытие/создание/закрытие файлов
+	// Р±Р»РѕРєРёСЂСѓРµРј РѕС‚РєСЂС‹С‚РёРµ/СЃРѕР·РґР°РЅРёРµ/Р·Р°РєСЂС‹С‚РёРµ С„Р°Р№Р»РѕРІ
 
-	std::string filePath(name); // string содержащий "фиктивный" путь к файлу
+	std::string filePath(name); // string СЃРѕРґРµСЂР¶Р°С‰РёР№ "С„РёРєС‚РёРІРЅС‹Р№" РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
 
 	if (TestTask::readOnlyFiles.contains(filePath)) {
 		std::cerr << "Didnt open a file in write only mode since it is already opened in read only mode\n";
 		return nullptr;
 	};
 
-	std::filesystem::path directoryPath = std::filesystem::path(filePath).parent_path(); //путь к директории к файлу
-	std::filesystem::path headerPath = directoryPath / headerFileName; // путь к header 
-	std::string fileName = std::filesystem::path(filePath).filename().string(); // имя самого файла
+	std::filesystem::path directoryPath = std::filesystem::path(filePath).parent_path(); //РїСѓС‚СЊ Рє РґРёСЂРµРєС‚РѕСЂРёРё Рє С„Р°Р№Р»Сѓ
+	std::filesystem::path headerPath = directoryPath / headerFileName; // РїСѓС‚СЊ Рє header 
+	std::string fileName = std::filesystem::path(filePath).filename().string(); // РёРјСЏ СЃР°РјРѕРіРѕ С„Р°Р№Р»Р°
 
 	std::ifstream header;
 
-	if (!std::filesystem::exists(headerPath)) { // нет header-а - значит нет и VFS (инициализируем)
-		std::filesystem::create_directories(directoryPath); // сначала создаем все директории по пути 
+	if (!std::filesystem::exists(headerPath)) { // РЅРµС‚ header-Р° - Р·РЅР°С‡РёС‚ РЅРµС‚ Рё VFS (РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј)
+		std::filesystem::create_directories(directoryPath); // СЃРЅР°С‡Р°Р»Р° СЃРѕР·РґР°РµРј РІСЃРµ РґРёСЂРµРєС‚РѕСЂРёРё РїРѕ РїСѓС‚Рё 
 
 		std::ofstream serviceStream;
 		serviceStream.open(headerPath);
 
-		// записываем дефолтные значения и имя файла
+		// Р·Р°РїРёСЃС‹РІР°РµРј РґРµС„РѕР»С‚РЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ Рё РёРјСЏ С„Р°Р№Р»Р°
 		serviceStream << defaultFilesPerPack << std::endl;
 		serviceStream << defaultFileOffset << std::endl;
 		serviceStream << fileName << std::endl;
@@ -131,13 +130,13 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 	size_t filesPerPack = 0;
 	size_t fileOffset = 0;
 
-	try { // читаем информацию о VFS из header 
+	try { // С‡РёС‚Р°РµРј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ VFS РёР· header 
 		std::getline(header, buff);
 		filesPerPack = stoi(buff);
 		std::getline(header, buff);
 		fileOffset = stoi(buff);
 	}
-	catch (const std::exception&) { // не смогли прочитать
+	catch (const std::exception&) { // РЅРµ СЃРјРѕРіР»Рё РїСЂРѕС‡РёС‚Р°С‚СЊ
 		std::cerr << "Error while working with header\n";
 		header.close();
 		return nullptr;
@@ -146,7 +145,7 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 	size_t currFilePosition = 0;
 	bool didntFind = true;
 
-	while (std::getline(header, buff)) { // ищем нужный файл в header
+	while (std::getline(header, buff)) { // РёС‰РµРј РЅСѓР¶РЅС‹Р№ С„Р°Р№Р» РІ header
 		if (buff == fileName) {
 			didntFind = false;
 			break;
@@ -156,7 +155,7 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 
 	header.close();
 
-	if (didntFind) { // в header нет файла - значит его нет в VFS (записываем в header)
+	if (didntFind) { // РІ header РЅРµС‚ С„Р°Р№Р»Р° - Р·РЅР°С‡РёС‚ РµРіРѕ РЅРµС‚ РІ VFS (Р·Р°РїРёСЃС‹РІР°РµРј РІ header)
 		std::ofstream serviceStream;
 		serviceStream.open(headerPath, std::ios::app);
 		serviceStream << fileName << std::endl;
@@ -173,7 +172,7 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 	file->indicatorPosition = 0;
 	file->packFileName = directoryPath / (std::to_string(packNumber) + packFileFormat);
 
-	if (!std::filesystem::exists(file->packFileName)) { // если нет пачки, то создаем
+	if (!std::filesystem::exists(file->packFileName)) { // РµСЃР»Рё РЅРµС‚ РїР°С‡РєРё, С‚Рѕ СЃРѕР·РґР°РµРј
 		std::ofstream serviceStream;
 		serviceStream.open(file->packFileName);
 		serviceStream.close();
@@ -182,7 +181,7 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 	std::fstream testStream;
 	testStream.open(file->packFileName, std::ios::in | std::ios::out | std::ios::ate);
 
-	if (testStream.good()) { // для проверки открываем .dat файл (пачку) 
+	if (testStream.good()) { // РґР»СЏ РїСЂРѕРІРµСЂРєРё РѕС‚РєСЂС‹РІР°РµРј .dat С„Р°Р№Р» (РїР°С‡РєСѓ) 
 		if (TestTask::writeOnlyFiles.contains(filePath)) {
 			++TestTask::writeOnlyFiles[filePath];
 		}
@@ -190,12 +189,12 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 			TestTask::writeOnlyFiles.emplace(std::make_pair(filePath, 1));
 		}
 
-		TestTask::fileMutexes.emplace(std::make_pair(filePath, std::make_unique<std::mutex>()));// mutex не копируется, поэтому так
+		TestTask::fileMutexes.emplace(std::make_pair(filePath, std::make_unique<std::mutex>()));// mutex РЅРµ РєРѕРїРёСЂСѓРµС‚СЃСЏ, РїРѕСЌС‚РѕРјСѓ С‚Р°Рє
 		testStream.close();
 		return file;
 	}
 	else {
-		// если возникли какие-то ошибки с .dat файлом
+		// РµСЃР»Рё РІРѕР·РЅРёРєР»Рё РєР°РєРёРµ-С‚Рѕ РѕС€РёР±РєРё СЃ .dat С„Р°Р№Р»РѕРј
 		testStream.close();
 		std::cerr << "Error while working with pack\n";
 		delete file;
@@ -205,18 +204,18 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 
 size_t TestTask::textFS::Read(File* f, char* buff, size_t len) {
 
-	if (!f) { // комментарии излишни (а зачем тогда?... (-_-)) 
+	if (!f) { // РєРѕРјРјРµРЅС‚Р°СЂРёРё РёР·Р»РёС€РЅРё (Р° Р·Р°С‡РµРј С‚РѕРіРґР°?... (-_-)) 
 		return 0;
 	}
 
-	// если файл не открыт в readonly режиме - выходим 
+	// РµСЃР»Рё С„Р°Р№Р» РЅРµ РѕС‚РєСЂС‹С‚ РІ readonly СЂРµР¶РёРјРµ - РІС‹С…РѕРґРёРј 
 	if (!TestTask::readOnlyFiles.contains(f->filePath)) {
 		return 0;
 	}
 
 	std::ifstream inputStream;
 	inputStream.open(f->packFileName);
-	inputStream.seekg(f->fileOffset * f->filePosition + f->indicatorPosition); // ставим курсор на место, на котором закончили в прошлый раз
+	inputStream.seekg(f->fileOffset * f->filePosition + f->indicatorPosition); // СЃС‚Р°РІРёРј РєСѓСЂСЃРѕСЂ РЅР° РјРµСЃС‚Рѕ, РЅР° РєРѕС‚РѕСЂРѕРј Р·Р°РєРѕРЅС‡РёР»Рё РІ РїСЂРѕС€Р»С‹Р№ СЂР°Р·
 
 	size_t initialPosition = f->indicatorPosition;
 	size_t i = 0;
@@ -235,19 +234,19 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 		return 0;
 	}
 
-	// если файл не открыт в writeonly режиме - выходим
+	// РµСЃР»Рё С„Р°Р№Р» РЅРµ РѕС‚РєСЂС‹С‚ РІ writeonly СЂРµР¶РёРјРµ - РІС‹С…РѕРґРёРј
 	if (!TestTask::writeOnlyFiles.contains(f->filePath)) {
 		return 0;
 	}
 
 	std::lock_guard<std::mutex> lock(*(TestTask::fileMutexes[f->filePath].get()));
-	// блокируем запись
+	// Р±Р»РѕРєРёСЂСѓРµРј Р·Р°РїРёСЃСЊ
 
 	std::fstream outputStream(f->packFileName, std::ios::in | std::ios::out | std::ios::ate);
-	outputStream.seekp(f->fileOffset * f->filePosition + f->indicatorPosition); // ставим курсор на место, на котором закончили в прошлый раз
+	outputStream.seekp(f->fileOffset * f->filePosition + f->indicatorPosition); // СЃС‚Р°РІРёРј РєСѓСЂСЃРѕСЂ РЅР° РјРµСЃС‚Рѕ, РЅР° РєРѕС‚РѕСЂРѕРј Р·Р°РєРѕРЅС‡РёР»Рё РІ РїСЂРѕС€Р»С‹Р№ СЂР°Р·
 
-	size_t maxLength = f->fileOffset - f->indicatorPosition; // считаем максимальную длину записи
-	size_t textLength = maxLength >= len ? len : maxLength; // считаем фактическую длину записи
+	size_t maxLength = f->fileOffset - f->indicatorPosition; // СЃС‡РёС‚Р°РµРј РјР°РєСЃРёРјР°Р»СЊРЅСѓСЋ РґР»РёРЅСѓ Р·Р°РїРёСЃРё
+	size_t textLength = maxLength >= len ? len : maxLength; // СЃС‡РёС‚Р°РµРј С„Р°РєС‚РёС‡РµСЃРєСѓСЋ РґР»РёРЅСѓ Р·Р°РїРёСЃРё
 
 	outputStream.write(buff, textLength);
 	outputStream.close();
@@ -259,14 +258,14 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 
 void TestTask::textFS::Close(File* f) {
 
-	if (!f) { // логично
+	if (!f) { // Р»РѕРіРёС‡РЅРѕ
 		return;
 	}
 
 	std::lock_guard<std::mutex> lock(TestTask::mapAccess);
-	// блокируем открытие/создание/закрытие файлов
+	// Р±Р»РѕРєРёСЂСѓРµРј РѕС‚РєСЂС‹С‚РёРµ/СЃРѕР·РґР°РЅРёРµ/Р·Р°РєСЂС‹С‚РёРµ С„Р°Р№Р»РѕРІ
 
-	// чистим map 
+	// С‡РёСЃС‚РёРј map 
 	if (TestTask::readOnlyFiles.contains(f->filePath)) {
 		if (TestTask::readOnlyFiles[f->filePath] <= 1) {
 			TestTask::readOnlyFiles.erase(f->filePath);

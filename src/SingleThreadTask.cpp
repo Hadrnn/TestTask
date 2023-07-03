@@ -1,38 +1,37 @@
-// -*- coding: utf-8 -*-
-#include "SingleThreadTask.h"
+п»ї#include "SingleThreadTask.h"
 #include "TextFS.h"
 #include <iostream>
 
 void singleThreadTest(char* toWrite) {
 	TestTask::textFS text;
 
-	TestTask::File* file1 = text.Create("C:/test1/test2/test3.txt"); // открываем на запись 
+	TestTask::File* file1 = text.Create("C:/test1/test2/test3.txt"); // РѕС‚РєСЂС‹РІР°РµРј РЅР° Р·Р°РїРёСЃСЊ 
 
 	std::cout << std::endl;
-	TestTask::File* file2 = text.Open("C:/test1/test2/test3.txt"); // пробуем открыть на чтение тот же файл
+	TestTask::File* file2 = text.Open("C:/test1/test2/test3.txt"); // РїСЂРѕР±СѓРµРј РѕС‚РєСЂС‹С‚СЊ РЅР° С‡С‚РµРЅРёРµ С‚РѕС‚ Р¶Рµ С„Р°Р№Р»
 	char* readTo = new char[11];
-	std::cout << "Read " << text.Read(file2, readTo, 10) << " symbols from a file\n"; // смотрим, сколько получилось прочитать
+	std::cout << "Read " << text.Read(file2, readTo, 10) << " symbols from a file\n"; // СЃРјРѕС‚СЂРёРј, СЃРєРѕР»СЊРєРѕ РїРѕР»СѓС‡РёР»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ
 	std::cout << std::endl;
 
-	std::cout << "Put " << text.Write(file1, toWrite, 10) << " symbols in a file\n"; // записываем в файл 
-	text.Close(file1); // закрываем файл 
-	std::cout << "Put " << text.Write(file1, toWrite, 10) << " symbols in a file\n"; // пробуем записать
+	std::cout << "Put " << text.Write(file1, toWrite, 10) << " symbols in a file\n"; // Р·Р°РїРёСЃС‹РІР°РµРј РІ С„Р°Р№Р» 
+	text.Close(file1); // Р·Р°РєСЂС‹РІР°РµРј С„Р°Р№Р» 
+	std::cout << "Put " << text.Write(file1, toWrite, 10) << " symbols in a file\n"; // РїСЂРѕР±СѓРµРј Р·Р°РїРёСЃР°С‚СЊ
 	std::cout << std::endl;
 
 
-	file2 = text.Open("C:/test1/test2/test3.txt"); // открываем на чтение
-	std::cout << "Read " << text.Read(file2, readTo, 10) << " symbols from a file\n"; // читаем из файла
-	std::cout << readTo; // результат
+	file2 = text.Open("C:/test1/test2/test3.txt"); // РѕС‚РєСЂС‹РІР°РµРј РЅР° С‡С‚РµРЅРёРµ
+	std::cout << "Read " << text.Read(file2, readTo, 10) << " symbols from a file\n"; // С‡РёС‚Р°РµРј РёР· С„Р°Р№Р»Р°
+	std::cout << readTo; // СЂРµР·СѓР»СЊС‚Р°С‚
 	std::cout << std::endl;
 
-	file2 = text.Open("C:/test1/test2/test4.txt"); // открываем на чтение файл которого нет в VFS
-	std::cout << "Read " << text.Read(file2, readTo, 10) << " symbols from a file\n"; // читаем из файла
+	file2 = text.Open("C:/test1/test2/test4.txt"); // РѕС‚РєСЂС‹РІР°РµРј РЅР° С‡С‚РµРЅРёРµ С„Р°Р№Р» РєРѕС‚РѕСЂРѕРіРѕ РЅРµС‚ РІ VFS
+	std::cout << "Read " << text.Read(file2, readTo, 10) << " symbols from a file\n"; // С‡РёС‚Р°РµРј РёР· С„Р°Р№Р»Р°
 	std::cout << std::endl;
 
-	TestTask::File* file3 = text.Open("C:/test1/test2/test3.txt"); // открываем тот же файл на чтение
-	std::cout << "Read " << text.Read(file3, readTo, 10) << " symbols from a file\n"; // читаем 
-	std::cout << readTo; // результат
-	std::cout << "Put " << text.Write(file3, toWrite, 10) << " symbols in a file\n"; // пытаемся записать в файл 
+	TestTask::File* file3 = text.Open("C:/test1/test2/test3.txt"); // РѕС‚РєСЂС‹РІР°РµРј С‚РѕС‚ Р¶Рµ С„Р°Р№Р» РЅР° С‡С‚РµРЅРёРµ
+	std::cout << "Read " << text.Read(file3, readTo, 10) << " symbols from a file\n"; // С‡РёС‚Р°РµРј 
+	std::cout << readTo; // СЂРµР·СѓР»СЊС‚Р°С‚
+	std::cout << "Put " << text.Write(file3, toWrite, 10) << " symbols in a file\n"; // РїС‹С‚Р°РµРјСЃСЏ Р·Р°РїРёСЃР°С‚СЊ РІ С„Р°Р№Р» 
 	std::cout << std::endl;
 
 	text.Close(file2);
