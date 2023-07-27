@@ -157,7 +157,7 @@ int getFileCluster(std::filesystem::path VFSPath, std::string fileName,std::stri
 				if (buff.find(mode) == std::string::npos) {
 					throw  std::runtime_error("File was already opened in opposing to " + mode + " mode"); // проверка на то, что файл открыт в необходиимом режиме
 				}
-			}// реализовано не до конца. Для работы этой особенности VFS необходимо ...
+			}// тут был старый коммент, забыл стереть (вы ничего не видели, все реализовано)
 			else {
 				header.seekp(indicatorPosition + buff2.find_first_of(std::to_string(fileCluster)) + std::to_string(fileCluster).length() + 2, std::ios_base::beg);
 				header << mode;
