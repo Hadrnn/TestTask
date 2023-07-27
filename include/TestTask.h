@@ -1,35 +1,43 @@
 ﻿#pragma once
-
 #include <string>
-#include <unordered_map>
 #include <filesystem>
-#include <memory>
+#include <mutex>
 
 namespace TestTask {
 
-	inline const std::string packFileFormat(".dat");
-	inline const std::string headerFileName("header" + packFileFormat);
-	inline const int defaultFilesPerPack = 2; // количество файлов в одном .dat файле (в одной пачке)
-	inline const int defaultFileOffset = 10; // количество символов на один файл
+	inline const std::string VFSFileFormat(".dat");
+	inline const std::string VFSHeaderFileName("VFSHeader" + VFSFileFormat);
+	inline const std::string VFSTableFileName("VFSTable" + VFSFileFormat);
+	inline const std::string VFSDataFileName("VFSData" + VFSFileFormat);
 
-	// дефолтные значения поставил такими маленькими чтобы было видно:
-	// создание нескольких пачек 
-	// попытку записи за границы файла
-	// 
+	inline const std::string clusterSizeMark("ClusterSize =");
+	inline const std::string firstEmptyClusterMark("FirstEmptyCluster =");
+	inline const std::string endOfVFSInfo("-----");
+	inline const std::string WriteOnlyMark("WO");
+	inline const std::string ReadOnlyMark("RO");
 
-	// int в unordered map - количество потоков, работающих с данным файлом ( количество объектов File открытых на этот файл)
-	static std::unordered_map<std::string, int> writeOnlyFiles;
-	static std::unordered_map<std::string, int> readOnlyFiles;
-	static std::unordered_map<std::string, std::unique_ptr<std::mutex>> fileMutexes;
+	inline const int defaultClusterSize = 10; // количество символов на один кластер
+	inline const int clusterIsEmpty = -1;
+	inline const int endOfFile = -2;
 
-	static std::mutex mapAccess;
+	static std::mutex VFSCritical;
+
+
+	enum class FileStatus : char {
+		ReadOnly,WriteOnly,Closed,EndOfFile
+	};
 
 	struct File {
-		std::filesystem::path packFileName; // путь к .dat файлу (к пачке)
+		FileStatus status = FileStatus::Closed;
+		std::filesystem::path VFSPath; // путь к директории с VFS
 		std::string filePath; // "фиктивный" путь к файлу
-		size_t fileOffset; // количество символов на один файл внутри конкретного .dat файла (внутри той пачки, в которой лежит файл)
-		size_t filePosition; // позиция файла внутри конкретного .dat файла (внутри той пачки, в которой лежит файл)
-		size_t indicatorPosition; // позиция, с которой будем читать/записывать
+		int firstCluster = 0; // номер первого кластера данного файла
+		int currentCluster = 0; // номер текущего кластера
+		size_t clusterSize = 0;
+		size_t indicatorPosition = 0; // позиция курсора в текущем кластере
+
+		File(std::filesystem::path VFSpath_, std::string filePath_, int Cluster_, int clusterSize_, FileStatus status_)
+			: VFSPath(VFSpath_), filePath(filePath_), firstCluster(Cluster_),currentCluster(Cluster_), clusterSize(clusterSize_), status(status_) {}
 	};
 
 	struct IVFS {

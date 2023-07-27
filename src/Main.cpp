@@ -1,14 +1,15 @@
 ﻿#include <iostream>
 #include "TextFS.h"
-#include "MultiThreadTask.h"
-#include "SingleThreadTask.h"
+
 
 int main() {
 
-	char toWrite[] = "A message\n";
-
-	singleThreadTest(toWrite);
-	multiThreadTest();
+	TestTask::textFS filesys;
+	TestTask::File* myfile = filesys.Create("C:/test1/test2/test3.txt");
+	char message[] = "Hi there, my name is Timur ";
+	filesys.Write(myfile, message, 26);
+	filesys.Close(myfile);
 
 	return 0;
 }
+
