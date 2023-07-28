@@ -16,12 +16,14 @@ namespace TestTask {
 	inline const std::string WriteOnlyMark("WO");
 	inline const std::string ReadOnlyMark("RO");
 
+	inline const int maxClusterDigits = 16; //максимальная длина номера кластера 
+	inline const int maxSettingLength = 50; // максимальная длина названия свойсва VFS
+	inline const int maxModeMarkLength = 4; // максимальная длина кода режима работы файла
 	inline const int defaultClusterSize = 10; // количество символов на один кластер
 	inline const int clusterIsEmpty = -1;
 	inline const int endOfFile = -2;
 
 	static std::mutex VFSCritical;
-
 
 	enum class FileStatus : char {
 		ReadOnly,WriteOnly,Closed,EndOfFile
