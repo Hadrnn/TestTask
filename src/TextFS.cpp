@@ -303,7 +303,6 @@ void changeClusterAssigment(std::filesystem::path VFSPath, int clusterNumber, in
 				serviceStream << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << changeTo << '\n';
 			}
 			else {
-				std::cout << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(changeTo) << '\n';
 				serviceStream << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(changeTo) << '\n';
 			}
 			break;
