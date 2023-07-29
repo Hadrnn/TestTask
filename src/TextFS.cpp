@@ -481,21 +481,27 @@ size_t TestTask::textFS::Read(File* f, char* buff, size_t len) {
 
 	while (symbolsRead < len) {
 
-		f->currentCluster = findNextCluster(f->VFSPath, f->currentCluster);
-		f->indicatorPosition = 0;
+		try {
+			f->currentCluster = findNextCluster(f->VFSPath, f->currentCluster);
+			f->indicatorPosition = 0;
 
-		if (f->currentCluster == TestTask::endOfFile) {
-			f->status = FileStatus::EndOfFile;
-			break;
+			if (f->currentCluster == TestTask::endOfFile) {
+				f->status = FileStatus::EndOfFile;
+				break;
+			}
+
+			inputStream.seekg(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
+			maxLength = f->clusterSize;
+			textLength = f->clusterSize >= len - symbolsRead ? len - symbolsRead : f->clusterSize;
+
+			inputStream.read(buff + symbolsRead, textLength);
+			symbolsRead += textLength;
+			f->indicatorPosition += symbolsRead;
 		}
-		
-		inputStream.seekg(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
-		maxLength = f->clusterSize;
-		textLength = f->clusterSize >= len - symbolsRead ? len - symbolsRead : f->clusterSize;
-
-		inputStream.read(buff+symbolsRead, textLength);
-		symbolsRead += textLength;
-		f->indicatorPosition += symbolsRead;
+		catch (const std::exception& e) {
+			std::cerr << e.what();
+			return symbolsRead;
+		}
 	}
 	return symbolsRead;
 }
@@ -522,40 +528,46 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 
 	while (symbolsWritten < len) {
 		
-		int nextCluster = findNextCluster(f->VFSPath, f->currentCluster);
-		if (nextCluster == TestTask::endOfFile) { // если все кластеры под данный файл закончились, то выделяем новый
+		try {
+			int nextCluster = findNextCluster(f->VFSPath, f->currentCluster);
+			if (nextCluster == TestTask::endOfFile) { // если все кластеры под данный файл закончились, то выделяем новый
 
-			//std::lock_guard(TestTask::VFSCritical);
+				//std::lock_guard(TestTask::VFSCritical);
 
-			VFSInfo info = getVFSInfo(f->VFSPath);
+				VFSInfo info = getVFSInfo(f->VFSPath);
 
-			int currentEmptyCluster = info.FirstEmptyCluster;
-			int nextEmptyCluster = findEmptyCluster(f->VFSPath, info.FirstEmptyCluster);
-			info.FirstEmptyCluster = nextEmptyCluster;
+				int currentEmptyCluster = info.FirstEmptyCluster;
+				int nextEmptyCluster = findEmptyCluster(f->VFSPath, info.FirstEmptyCluster);
+				info.FirstEmptyCluster = nextEmptyCluster;
 
-			refreshVFSHeader(f->VFSPath, info);
-			changeClusterAssigment(f->VFSPath, f->currentCluster, currentEmptyCluster);
-			changeClusterAssigment(f->VFSPath, currentEmptyCluster, TestTask::endOfFile);
-			nextCluster = currentEmptyCluster;
+				refreshVFSHeader(f->VFSPath, info);
+				changeClusterAssigment(f->VFSPath, f->currentCluster, currentEmptyCluster);
+				changeClusterAssigment(f->VFSPath, currentEmptyCluster, TestTask::endOfFile);
+				nextCluster = currentEmptyCluster;
+			}
+
+			f->currentCluster = nextCluster;
+			f->indicatorPosition = 0;
+
+			outputStream.seekp(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
+			maxLength = f->clusterSize;
+			textLength = f->clusterSize >= len - symbolsWritten ? len - symbolsWritten : f->clusterSize;
+
+			outputStream.write(buff + symbolsWritten, textLength);
+			symbolsWritten += textLength;
+			f->indicatorPosition += textLength;
 		}
-
-		f->currentCluster = nextCluster;
-		f->indicatorPosition = 0;
-
-		outputStream.seekp(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
-		maxLength = f->clusterSize;
-		textLength = f->clusterSize >= len - symbolsWritten ? len - symbolsWritten : f->clusterSize;
-
-		outputStream.write(buff + symbolsWritten, textLength);
-		symbolsWritten += textLength;
-		f->indicatorPosition += textLength;
+		catch (const std::exception& e) {
+			std::cerr << e.what();
+			return symbolsWritten;
+		}
 	}
 	return symbolsWritten;
 }
 
 void TestTask::textFS::Close(File* f) {
 
-	if (!f) { 
+	if (!f) {
 		return;
 	}
 
@@ -563,5 +575,11 @@ void TestTask::textFS::Close(File* f) {
 	f->status = FileStatus::Closed;
 	f->indicatorPosition = 0;
 
-	deleteModeMark(f->VFSPath, f->filePath);
+	try {
+		deleteModeMark(f->VFSPath, f->filePath);
+	}
+	catch (const std::exception& e) {
+		std::cerr << e.what();
+		return;
+	}
 };
