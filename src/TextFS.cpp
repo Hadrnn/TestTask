@@ -127,13 +127,9 @@ VFSInfo getVFSInfo(std::filesystem::path VFSPath) { // получаем инфо
 	return info;
 }
 
-bool hasModeMark(const std::string& str) { // для понимания, есть ли в Header информация о режиме, в котором открыт файл
-	for (char c : str) {
-		if (c != ' ' && c != '\n') {
-			return true;
-		}
-	}
-	return false;
+int getNumberOfThreads(const std::string& str) { // возвращает количество потоков, работающих с файлом
+	
+	return std::stoi(str.substr(TestTask::maxModeMarkLength,str.length()));
 }
 
 int getFileCluster(std::filesystem::path VFSPath, std::string fileName,std::string mode) { // ищем изначальный кластер файла
@@ -159,15 +155,22 @@ int getFileCluster(std::filesystem::path VFSPath, std::string fileName,std::stri
 			fileCluster = std::stoi(buff); // получили номер кластера
 			buff = buff.substr(TestTask::maxClusterDigits + 1, buff.length());
 
-			if (hasModeMark(buff)) {
+			int threadsCounter = getNumberOfThreads(buff); // будет равен 0 только если файл не открыт в каком-либо режиме (нет метки режима или количество потоков = 0)
+
+			if (threadsCounter) {
 				if (buff.find(mode) == std::string::npos) {
 					throw  std::runtime_error("File was already opened in opposing to " + mode + " mode\n"); // проверка на то, что файл открыт в необходиимом режиме
 				}
 			}
 			else {
+				if (threadsCounter >= pow(10, TestTask::maxThreadsCounerLength)) {
+					throw  std::runtime_error("Too many threads for one file\n");
+				}
+
 				header.clear();
 				header.seekp(pointerPos + fileName.length() + 1 + TestTask::maxClusterDigits + 1, std::ios_base::beg);
 				header << mode + std::string(TestTask::maxModeMarkLength - mode.length(), ' ');
+				header << ' ' << std::setw(TestTask::maxThreadsCounerLength) << std::setfill('0') << threadsCounter + 1;
 			}
 
 			break;
@@ -193,18 +196,20 @@ void deleteModeMark(std::filesystem::path VFSPath, std::string fileName) {
 		throw  std::runtime_error("Couldnt open VFS header\n");
 	}
 
-	int fileCluster = -1;
-
 	int pointerPos = 0;
 
 	while (std::getline(header, buff)) { // ищем нужный файл в header
 		if (buff.find(fileName) != std::string::npos) {
-			
+
+
 			int lineLength = buff.length();
+			buff = buff.substr(fileName.length() + 1 + TestTask::maxClusterDigits + 1, buff.length());
+
+			int threadsCounter = getNumberOfThreads(buff);
 
 			header.clear();
-			header.seekp(pointerPos + fileName.length() + 1 + TestTask::maxClusterDigits + 1, std::ios_base::beg);
-			header << std::string(TestTask::maxModeMarkLength, ' ');
+			header.seekp(pointerPos + fileName.length() + 1 + TestTask::maxClusterDigits + 1 + TestTask::maxModeMarkLength + 1, std::ios_base::beg);
+			header << std::setw(TestTask::maxThreadsCounerLength) << std::setfill('0') << threadsCounter - 1;
 			return;
 		}
 		pointerPos = header.tellp();
@@ -368,7 +373,9 @@ int addFileToVFS(std::filesystem::path VFSPath, std::string fileName, std::strin
 		header.seekp(0, std::ios_base::end);
 		header << fileName << " ";
 		header << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << currentEmptyCluster;
-		header << ' ' << mode + std::string(TestTask::maxModeMarkLength - mode.length(), ' ') << '\n';
+		header << ' ' << mode + std::string(TestTask::maxModeMarkLength - mode.length(), ' ');
+		header << ' ' << std::setw(TestTask::maxThreadsCounerLength) << std::setfill('0') << 1;
+		header << '\n';
 		header.close();
 
 		return currentEmptyCluster;
