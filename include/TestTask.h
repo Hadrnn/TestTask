@@ -23,6 +23,7 @@ namespace TestTask {
 	inline const int defaultClusterSize = 10; // количество символов на один кластер
 	inline const int clusterIsEmpty = -1;
 	inline const int endOfFile = -2;
+	inline const int faultyCluster = -3;
 
 	static std::mutex VFSCritical;
 
