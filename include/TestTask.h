@@ -31,7 +31,8 @@ namespace TestTask {
 	inline const int faultyCluster = -3; // метка кластера с ошибкой 
 	inline const int didNotFindCluster = -4; // ошибка при поиске кластера
 
-	static std::mutex VFSCritical;
+	static std::mutex VFSTableAccess;
+	static std::mutex VFSHeaderAccess;
 
 	enum class FileStatus : char {
 		ReadOnly,WriteOnly,Closed,EndOfFile,Bad

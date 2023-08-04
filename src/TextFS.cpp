@@ -69,7 +69,8 @@ std::istream& operator>>(std::istream& is, FileInfo& info) {
 /// <returns>Путь к папке с VFS</returns>
 std::filesystem::path VFSInit(const std::string& filePath) { 
 
-	//std::lock_guard(TestTask::VFSCritical);// блокикуем VFS
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);
 
 	std::filesystem::path VFSPath(filePath);
 
@@ -102,6 +103,9 @@ std::filesystem::path VFSInit(const std::string& filePath) {
 /// <param name="filePath"> - Путь к файлу</param>
 /// <returns>Путь к папке с VFS</returns>
 std::filesystem::path findVFSPath(const std::string& filePath) { 
+
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);
 
 	std::filesystem::path VFSPath(filePath);
 
@@ -149,6 +153,7 @@ std::filesystem::path findVFSPath(const std::string& filePath) {
 /// <returns>VFSInfo</returns>
 VFSInfo getVFSInfo(const std::filesystem::path& VFSPath) {
 
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);
 	std::ifstream header;
 	std::string buff;
 
@@ -196,6 +201,8 @@ VFSInfo getVFSInfo(const std::filesystem::path& VFSPath) {
 /// <returns>Номер начального кластера файла</returns>
 int openFileThread(const std::filesystem::path& VFSPath, const std::string& fileName, const std::string& mode) {
 	
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+
 	std::string buff;
 	std::fstream header;
 	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
@@ -243,6 +250,8 @@ int openFileThread(const std::filesystem::path& VFSPath, const std::string& file
 /// <param name="fileName"> - Путь к файлу</param>
 void closeFileThread(const std::filesystem::path& VFSPath, const std::string& fileName) { 
 
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+
 	std::string buff;
 	std::fstream header;
 	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
@@ -283,6 +292,8 @@ void closeFileThread(const std::filesystem::path& VFSPath, const std::string& fi
 int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) { 
 	std::fstream serviceStream;
 
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);// блокируем VFS
+
 	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
 	if (!serviceStream.good()) {
 		serviceStream.close();
@@ -304,7 +315,7 @@ int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) {
 		++currentLine;
 	}
 	
-	//std::lock_guard(TestTask::VFSCritical);
+
 	serviceStream.seekp(0, std::ios_base::end);
 	serviceStream.clear();
 	serviceStream << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
@@ -320,6 +331,8 @@ int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) {
 void refreshVFSHeader(const std::filesystem::path& VFSPath, const VFSInfo& info) {
 	// пока что обновляется только позиция первого свободного кластера
 	// с расширением возможностей VFS можно обновлять и другие данные
+
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
 
 	std::fstream header;
 	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
@@ -353,6 +366,8 @@ void refreshVFSHeader(const std::filesystem::path& VFSPath, const VFSInfo& info)
 /// <param name="changeTo"> - Куда ссылаемся</param>
 void changeClusterAssigment(const std::filesystem::path& VFSPath, int clusterNumber, int changeTo) {
 
+	std::lock_guard tableGuard(TestTask::VFSTableAccess); // блокируем VFS
+	
 	if (clusterNumber < 0) {
 		throw  std::runtime_error("Invalid cluster number\n");
 	}
@@ -409,6 +424,9 @@ void changeClusterAssigment(const std::filesystem::path& VFSPath, int clusterNum
 /// <param name="cluster"> - Текущий кластер</param>
 /// <returns>Номер следующего кластера</returns>
 int findNextCluster(const std::filesystem::path& VFSPath, int cluster) { // переходим по ссылку на следующий кластер 
+
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);
+
 	std::fstream serviceStream;
 	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
 	if (!serviceStream.good()) {
@@ -444,7 +462,7 @@ int findNextCluster(const std::filesystem::path& VFSPath, int cluster) { // пе
 int addFileToVFS(const std::filesystem::path& VFSPath, const std::string& fileName, const std::string& mode) { // добавляем файл в VFS
 
 	try {
-		//std::lock_guard(TestTask::VFSCritical);
+		
 
 		VFSInfo info = getVFSInfo(VFSPath);
 
@@ -456,6 +474,7 @@ int addFileToVFS(const std::filesystem::path& VFSPath, const std::string& fileNa
 		changeClusterAssigment(VFSPath, currentEmptyCluster, TestTask::endOfFile);
 		changeClusterAssigment(VFSPath, nextEmptyCluster, TestTask::clusterIsEmpty);
 
+		std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS (важно после refreshVFSHeader)
 		std::fstream header;
 		header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::ate | std::ios::binary);
 		if (!header.good()) {
