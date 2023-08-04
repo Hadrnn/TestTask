@@ -16,7 +16,7 @@ namespace TestTask {
 	inline const std::string WriteOnlyMark("WO");
 	inline const std::string ReadOnlyMark("RO");
 
-	inline const std::filesystem::path errorPath("ERRORPATH");
+	inline const std::filesystem::path didNotFindVFS("didNotFindVFS");
 
 	inline const int maxClusterDigits = 16; //максимальная длина номера кластера 
 	inline const int maxSettingLength = 50; // максимальная длина названия свойсва VFS

@@ -62,7 +62,12 @@ std::istream& operator>>(std::istream& is, FileInfo& info) {
 	return is;
 }
 
-std::filesystem::path VFSInit(std::string filePath) { // инициализыция
+/// <summary>
+/// Инициализация VFS
+/// </summary>
+/// <param name="filePath"> - Путь к файлу</param>
+/// <returns>Путь к папке с VFS</returns>
+std::filesystem::path VFSInit(std::string filePath) { 
 
 	//std::lock_guard(TestTask::VFSCritical);// блокикуем VFS
 
@@ -91,7 +96,12 @@ std::filesystem::path VFSInit(std::string filePath) { // инициализыц�
 	return VFSPath;
 }
 
-std::filesystem::path findVFSPath(std::string filePath) {
+/// <summary>
+/// Поиск пути к файлам VFS
+/// </summary>
+/// <param name="filePath"> - Путь к файлу</param>
+/// <returns>Путь к папке с VFS</returns>
+std::filesystem::path findVFSPath(std::string filePath) { 
 
 	std::filesystem::path VFSPath(filePath);
 
@@ -125,14 +135,19 @@ std::filesystem::path findVFSPath(std::string filePath) {
 		}
 	};
 
-	if (VFSPath == VFSPath.root_path()) {
-		VFSPath = TestTask::errorPath;
+	if (VFSPath == VFSPath.root_path()) { // попадем сюда только если не нашли VFS
+		VFSPath = TestTask::didNotFindVFS;
 	}
 
 	return VFSPath;
 }
 
-VFSInfo getVFSInfo(std::filesystem::path VFSPath) { // получаем информацию о VFS из Header
+/// <summary>
+/// Получение информации о VFS из VFSHeader
+/// </summary>
+/// <param name="VFSPath"> - Путь к папке с VFS</param>
+/// <returns>VFSInfo</returns>
+VFSInfo getVFSInfo(std::filesystem::path VFSPath) {
 
 	std::ifstream header;
 	std::string buff;
@@ -172,7 +187,14 @@ VFSInfo getVFSInfo(std::filesystem::path VFSPath) { // получаем инфо
 	return info;
 }
 
-int getFileCluster(std::filesystem::path VFSPath, std::string fileName,std::string mode) { // ищем изначальный кластер файла
+/// <summary>
+/// Поиск начального кластера файла и отметка об открытии File
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="fileName"> - Путь к файлу</param>
+/// <param name="mode"> - режим, в котором будет открыт файл</param>
+/// <returns>Номер начального кластера файла</returns>
+int openFileThread(std::filesystem::path VFSPath, std::string fileName,std::string mode) {
 	
 	std::string buff;
 	std::fstream header;
@@ -214,7 +236,12 @@ int getFileCluster(std::filesystem::path VFSPath, std::string fileName,std::stri
 	return TestTask::didNotFindCluster; // в том случае, если не нашли файл в VFSHeader
 }
 
-void deleteModeMark(std::filesystem::path VFSPath, std::string fileName) {
+/// <summary>
+/// Отметка о закрытии File
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="fileName"> - Путь к файлу</param>
+void closeFileThread(std::filesystem::path VFSPath, std::string fileName) { 
 
 	std::string buff;
 	std::fstream header;
@@ -247,7 +274,13 @@ void deleteModeMark(std::filesystem::path VFSPath, std::string fileName) {
 	header.close();
 }
 
-int findEmptyCluster(std::filesystem::path VFSPath, int from = 0) { // поиск самого ближнего к началу Data фаqла свободного кластера 
+/// <summary>
+/// Поиск самого ближнего к from свободного кластера 
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="from"> - С какого кластера начинать поиск</param>
+/// <returns>Номер свободного кластера</returns>
+int findEmptyCluster(std::filesystem::path VFSPath, int from = 0) { 
 	std::fstream serviceStream;
 
 	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
@@ -279,8 +312,13 @@ int findEmptyCluster(std::filesystem::path VFSPath, int from = 0) { // поис�
 	return currentLine;
 }
 
+/// <summary>
+/// Обновление информации в Header 
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="info"> - Информация для записи</param>
 void refreshVFSHeader(std::filesystem::path VFSPath, VFSInfo info) {
-	// обновляем информацию в Header (пока что обновляется только позиция первого свободного кластера)
+	// (пока что обновляется только позиция первого свободного кластера) 
 	// с расширением возможностей VFS можно обновлять и другие данные
 
 	std::fstream header;
@@ -291,24 +329,29 @@ void refreshVFSHeader(std::filesystem::path VFSPath, VFSInfo info) {
 	}
 	
 	std::string buff;
-	size_t lineNumber = 0;
-	std::getline(header, buff);
-	while (buff.find(TestTask::endOfVFSInfo) == std::string::npos && !header.eof()) {
+	int pointerPos = 0;
+	
+	while (buff.find(TestTask::endOfVFSInfo) == std::string::npos && !header.eof() && std::getline(header, buff)) {
 
 		 if (buff.find(TestTask::firstEmptyClusterMark) != std::string::npos) { // работает - не чини
-			header.seekp(lineNumber * (TestTask::maxSettingLength + TestTask::maxClusterDigits + 2), std::ios::beg);
+			header.seekp(pointerPos, std::ios::beg);
 			header << TestTask::firstEmptyClusterMark + std::string(TestTask::maxSettingLength - TestTask::firstEmptyClusterMark.length(), ' ');
 			header << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << info.FirstEmptyCluster;
 			header << '\n';
 			break;
 		}
-		std::getline(header, buff);
-		++lineNumber;
+		pointerPos = header.tellp();
  	}
 	header.close();
 }
 
-void changeClusterAssigment(std::filesystem::path VFSPath, int clusterNumber, int changeTo) { // переназначаем ссылку на следующий кластер
+/// <summary>
+/// Переназначение ссылки на следующий кластер
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="clusterNumber"> - Откуда ссылаемся</param>
+/// <param name="changeTo"> - Куда ссылаемся</param>
+void changeClusterAssigment(std::filesystem::path VFSPath, int clusterNumber, int changeTo) {
 	std::fstream serviceStream;
 	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
 	
@@ -318,14 +361,15 @@ void changeClusterAssigment(std::filesystem::path VFSPath, int clusterNumber, in
 	}
 
 	int currentCluster = 0;
-	
-	while (!serviceStream.eof()) {
+	int pointerPos = 0;
+	std::string buff;
+
+	while (std::getline(serviceStream,buff)) {
 		
-		int currentAssigment = 0;
-		serviceStream >> currentAssigment;
+		int currentAssigment = std::stoi(buff);
 
 		if (currentCluster == clusterNumber) {
-			serviceStream.seekp((TestTask::maxClusterDigits + 2)*currentCluster, std::ios::beg);
+			serviceStream.seekp(pointerPos, std::ios::beg);
 			serviceStream.clear();
 
 			if (changeTo >= 0) {
@@ -337,6 +381,7 @@ void changeClusterAssigment(std::filesystem::path VFSPath, int clusterNumber, in
 			break;
 		}
 		++currentCluster;
+		pointerPos = serviceStream.tellp();
 	}
 	serviceStream.close();
 
@@ -345,6 +390,12 @@ void changeClusterAssigment(std::filesystem::path VFSPath, int clusterNumber, in
 	}
 }
 
+/// <summary>
+/// Поиск следующего кластера
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="cluster"> - Текущий кластер</param>
+/// <returns>Номер следующего кластера</returns>
 int findNextCluster(std::filesystem::path VFSPath, int cluster) { // переходим по ссылку на следующий кластер 
 	std::fstream serviceStream;
 	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
@@ -371,6 +422,13 @@ int findNextCluster(std::filesystem::path VFSPath, int cluster) { // перех�
 	return TestTask::didNotFindCluster;
 }
 
+/// <summary>
+/// Добавление файла в VFS
+/// </summary>
+/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="fileName"> - Имя файла</param>
+/// <param name="mode"> - Режим, в котором будет открыт файл</param>
+/// <returns>Номер первого кластера файла</returns>
 int addFileToVFS(std::filesystem::path VFSPath, std::string fileName, std::string mode) { // добавляем файл в VFS
 
 	try {
@@ -419,7 +477,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 		return nullptr;
 	}
 
-	if (VFSPath == TestTask::errorPath) {
+	if (VFSPath == TestTask::didNotFindVFS) {
 		return nullptr;
 	}
 
@@ -433,7 +491,7 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 
 	try {
 
-		int fileCluster = getFileCluster(VFSPath, filePath, ReadOnlyMark);
+		int fileCluster = openFileThread(VFSPath, filePath, ReadOnlyMark);
 		if (fileCluster == TestTask::didNotFindCluster ) {
 			return nullptr;
 		}
@@ -457,12 +515,12 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 	try {
 		VFSPath = findVFSPath(filePath);
 	}
-	catch (const std::exception& e) { // другие ошибки при поиске VFS
+	catch (const std::exception& e) {
 		std::cerr << e.what();
 		return nullptr;
 	}
 
-	if (VFSPath == TestTask::errorPath) { // не нашли VFS
+	if (VFSPath == TestTask::didNotFindVFS) { // не нашли VFS
 		VFSPath = VFSInit(filePath);
 	}
 
@@ -475,7 +533,7 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 	File* file = nullptr;
 
 	try {
-		int fileCluster = getFileCluster(VFSPath, filePath, TestTask::WriteOnlyMark);
+		int fileCluster = openFileThread(VFSPath, filePath, TestTask::WriteOnlyMark);
 
 		if (fileCluster == TestTask::didNotFindCluster) {
 			fileCluster = addFileToVFS(VFSPath, filePath, TestTask::WriteOnlyMark);
@@ -619,7 +677,7 @@ void TestTask::textFS::Close(File* f) {
 	f->indicatorPosition = 0;
 
 	try {
-		deleteModeMark(f->VFSPath, f->filePath);
+		closeFileThread(f->VFSPath, f->filePath);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what();
