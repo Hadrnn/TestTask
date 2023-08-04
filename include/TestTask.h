@@ -24,10 +24,12 @@ namespace TestTask {
 	inline const int maxThreadsCount = 20; // максимальное количество потоков на один файл
 	inline const int maxThreadsCounterLength = 2; // количество цифр в maxThreadsCount
 	inline const int defaultClusterSize = 10; // количество символов на один кластер
-	inline const int clusterIsEmpty = -1;
-	inline const int endOfFile = -2;
-	inline const int faultyCluster = -3;
-	inline const int didNotFindCluster = -4;
+
+	// метки для VFSTable
+	inline const int clusterIsEmpty = -1; // метка пустого кластера
+	inline const int endOfFile = -2; // метка последнего для данного файла кластера
+	inline const int faultyCluster = -3; // метка кластера с ошибкой 
+	inline const int didNotFindCluster = -4; // ошибка при поиске кластера
 
 	static std::mutex VFSCritical;
 
