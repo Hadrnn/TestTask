@@ -319,6 +319,7 @@ int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) {
 	serviceStream.seekp(0, std::ios_base::end);
 	serviceStream.clear();
 	serviceStream << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
+	serviceStream.close();
 
 	return currentLine;
 }
