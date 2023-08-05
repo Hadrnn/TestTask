@@ -2,6 +2,7 @@
 #include <string>
 #include <filesystem>
 #include <mutex>
+#include <fstream>
 
 namespace TestTask {
 
@@ -38,17 +39,49 @@ namespace TestTask {
 		ReadOnly,WriteOnly,Closed,EndOfFile,Bad
 	};
 
-	struct File {
-		FileStatus status = FileStatus::Closed;
-		std::filesystem::path VFSPath; // путь к директории с VFS
-		std::string filePath; // "фиктивный" путь к файлу
-		int firstCluster = 0; // номер первого кластера данного файла
-		int currentCluster = 0; // номер текущего кластера
-		size_t clusterSize = 0;
+	class File {
+	public:
+		std::fstream VFSHeader;
+
+		std::fstream VFSTable;
+
+		std::fstream VFSData;
+
 		size_t indicatorPosition = 0; // позиция курсора в текущем кластере
 
-		File(std::filesystem::path VFSpath_, std::string filePath_, int Cluster_, int clusterSize_, FileStatus status_)
-			: VFSPath(VFSpath_), filePath(filePath_), firstCluster(Cluster_),currentCluster(Cluster_), clusterSize(clusterSize_), status(status_) {}
+		size_t currentCluster = 0; // номер текущего кластера
+
+		File(std::filesystem::path VFSpath_, std::string filePath_, FileStatus status_);
+
+		~File();
+
+		operator bool();
+
+		std::string getFilePath() { return filePath; };
+
+		size_t getClusterSize() { return clusterSize; }
+
+		void finInit(int clusterSize_, int firstCluster_);
+
+		FileStatus getStatus() { return status; }
+
+		void setClosedStatus() { status = FileStatus::Closed; }
+
+		void setBadStatus() { status = FileStatus::Bad; }
+
+		void setEOFStatus() { status = FileStatus::EndOfFile; }
+
+		size_t getFirstCluster() { return firstCluster; }
+
+	private:
+		FileStatus status = FileStatus::Closed;
+
+		//std::filesystem::path VFSPath; // путь к директории с VFS
+		std::string filePath; // "фиктивный" путь к файлу
+
+		size_t firstCluster = 0; // номер первого кластера данного файла
+
+		size_t clusterSize = 0;
 	};
 
 	struct IVFS {

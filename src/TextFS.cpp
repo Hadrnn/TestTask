@@ -5,6 +5,35 @@
 #include <iomanip>
 #include <exception>
 
+TestTask::File::File(std::filesystem::path VFSpath_, std::string filePath_, FileStatus status_)
+	: filePath(filePath_), status(status_) {
+
+	VFSHeader.open(VFSpath_ / VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
+	VFSTable.open(VFSpath_ / VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
+	VFSData.open(VFSpath_ / VFSDataFileName, std::ios::in | std::ios::out | std::ios::binary);
+}
+
+
+TestTask::File::~File() {
+	VFSHeader.close();
+	VFSTable.close();
+	VFSData.close();
+}
+
+TestTask::File::operator bool() {
+	return bool(clusterSize);
+}
+
+/// <summary>
+/// Завершение созднания File
+/// </summary>
+/// <param name="clusterSize_"> - Размер кластера в VFS </param>
+/// <param name="firstCluster_"> - Первый кластер файла</param>
+void TestTask::File::finInit(int clusterSize_, int firstCluster_) {
+	clusterSize = clusterSize_;
+	firstCluster = firstCluster_;
+}
+
 struct VFSInfo { // структура, в которую будут записываться данные о VFS
 	operator bool() { return clusterSize > 0 && FirstEmptyCluster >= 0; }
 	int clusterSize = -1;
@@ -151,23 +180,21 @@ std::filesystem::path findVFSPath(const std::string& filePath) {
 /// </summary>
 /// <param name="VFSPath"> - Путь к папке с VFS</param>
 /// <returns>VFSInfo</returns>
-VFSInfo getVFSInfo(const std::filesystem::path& VFSPath) {
+VFSInfo getVFSInfo(TestTask::File* f) {
 
 	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);
-	std::ifstream header;
+	if (f->VFSHeader.bad()) {
+		throw  std::runtime_error("Error while working with VFS header\n");
+	}
+
+	f->VFSHeader.clear();
+	f->VFSHeader.seekp(0, std::ios_base::beg);
 	std::string buff;
 
 	VFSInfo info;
-
-	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::binary);
-
-	if (!header.good()) {
-		header.close();
-		throw  std::runtime_error("Couldnt open VFS header\n");
-	}
 	
-	std::getline(header, buff);
-	while (buff.find(TestTask::endOfVFSInfo) == std::string::npos && !header.eof()) { // Параметры VFS могут лежать в Header в любом порядке
+	std::getline(f->VFSHeader, buff);
+	while (buff.find(TestTask::endOfVFSInfo) == std::string::npos && !f->VFSHeader.eof()) { // Параметры VFS могут лежать в Header в любом порядке
 
 		if (buff.find(TestTask::clusterSizeMark) != std::string::npos) {
 			try {
@@ -185,10 +212,9 @@ VFSInfo getVFSInfo(const std::filesystem::path& VFSPath) {
 				std::cerr << "Error while working with VFS Header\n";
 			}
 		}
-		std::getline(header, buff);
+		std::getline(f->VFSHeader, buff);
 	}
 
-	header.close();
 	return info;
 }
 
@@ -199,28 +225,28 @@ VFSInfo getVFSInfo(const std::filesystem::path& VFSPath) {
 /// <param name="fileName"> - Путь к файлу</param>
 /// <param name="mode"> - режим, в котором будет открыт файл</param>
 /// <returns>Номер начального кластера файла</returns>
-int openFileThread(const std::filesystem::path& VFSPath, const std::string& fileName, const std::string& mode) {
+int openFileThread(TestTask::File* f , const std::string& mode) {
 	
 	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
 
-	std::string buff;
-	std::fstream header;
-	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
-
-	if (!header.good()) {
-		header.close();
-		throw  std::runtime_error("Couldnt open VFS header\n");
+	if (f->VFSHeader.bad()) {
+		throw  std::runtime_error("Error while working with VFS header\n");
 	}
 
-	int pointerPos = 0;
-	FileInfo info(fileName);
+	f->VFSHeader.clear();
+	f->VFSHeader.seekp(0, std::ios_base::beg);
 
-	while (std::getline(header, buff)) { // ищем нужный файл в header
-		if (buff.find(fileName) != std::string::npos) { // нашли
+	std::string buff;
+
+	int pointerPos = 0;
+	FileInfo info(f->getFilePath());
+
+	while (std::getline(f->VFSHeader, buff)) { // ищем нужный файл в header
+		if (buff.find(f->getFilePath()) != std::string::npos) { // нашли
 
 			
-			header.seekg(pointerPos, std::ios_base::beg);
-			header >> info;
+			f->VFSHeader.seekg(pointerPos, std::ios_base::beg);
+			f->VFSHeader >> info;
 
 			if (info.numberOfThreads && buff.find(mode) == std::string::npos) { // если с данным файлом работает хоть один поток в другом режиме
 				throw  std::runtime_error("File was already opened in opposing to " + mode + " mode\n");
@@ -229,16 +255,14 @@ int openFileThread(const std::filesystem::path& VFSPath, const std::string& file
 				if (++info.numberOfThreads >TestTask::maxThreadsCount) {
 					throw  std::runtime_error("Too many threads for one file\n");
 				}
-				header.clear();
-				header.seekp(pointerPos, std::ios_base::beg);
-				header << info; // перед этим увеличилии количество рабочих потоков (см. несколько строк выше)
+				f->VFSHeader.clear();
+				f->VFSHeader.seekp(pointerPos, std::ios_base::beg);
+				f->VFSHeader << info; // перед этим увеличилии количество рабочих потоков (см. несколько строк выше)
 				return info.firstCluster;
 			}
 		}
-		pointerPos = header.tellp();
+		pointerPos = f->VFSHeader.tellp();
 	}
-
-	header.close();
 
 	return TestTask::didNotFindCluster; // в том случае, если не нашли файл в VFSHeader
 }
@@ -248,39 +272,37 @@ int openFileThread(const std::filesystem::path& VFSPath, const std::string& file
 /// </summary>
 /// <param name="VFSPath"> - Путь к VFS</param>
 /// <param name="fileName"> - Путь к файлу</param>
-void closeFileThread(const std::filesystem::path& VFSPath, const std::string& fileName) { 
+void closeFileThread(TestTask::File*f ) { 
 
 	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
 
-	std::string buff;
-	std::fstream header;
-	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
-
-	if (!header.good()) {
-		header.close();
-		throw  std::runtime_error("Couldnt open VFS header\n");
+	if (f->VFSHeader.bad()) {
+		throw  std::runtime_error("Error while working with VFS header\n");
 	}
 
+	f->VFSHeader.clear();
+	f->VFSHeader.seekp(0, std::ios_base::beg);
+
+	std::string buff;
+
 	int pointerPos = 0;
-	FileInfo info(fileName);
+	FileInfo info(f->getFilePath());
 
-	while (std::getline(header, buff)) { // ищем нужный файл в header
-		if (buff.find(fileName) != std::string::npos) {
+	while (std::getline(f->VFSHeader, buff)) { // ищем нужный файл в header
+		if (buff.find(f->getFilePath()) != std::string::npos) {
 
-			header.seekg(pointerPos, std::ios_base::beg);
-			header >> info;
+			f->VFSHeader.seekg(pointerPos, std::ios_base::beg);
+			f->VFSHeader >> info;
 
 			--info.numberOfThreads;
 
-			header.clear();
-			header.seekp(pointerPos, std::ios_base::beg);
-			header << info;
-			header.close();
+			f->VFSHeader.clear();
+			f->VFSHeader.seekp(pointerPos, std::ios_base::beg);
+			f->VFSHeader << info;
 			return;
 		}
-		pointerPos = header.tellp();
+		pointerPos = f->VFSHeader.tellp();
 	}
-	header.close();
 }
 
 /// <summary>
@@ -289,24 +311,24 @@ void closeFileThread(const std::filesystem::path& VFSPath, const std::string& fi
 /// <param name="VFSPath"> - Путь к VFS</param>
 /// <param name="from"> - С какого кластера начинать поиск</param>
 /// <returns>Номер свободного кластера</returns>
-int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) { 
-	std::fstream serviceStream;
+int findEmptyCluster(TestTask::File* f, int from = 0) { 
 
 	std::lock_guard tableGuard(TestTask::VFSTableAccess);// блокируем VFS
 
-	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
-	if (!serviceStream.good()) {
-		serviceStream.close();
-		throw  std::runtime_error("Couldnt open VFS Table\n");
+	if (f->VFSTable.bad()) {
+		throw  std::runtime_error("Error while working with VFS table\n");
 	}
+
+	f->VFSTable.clear();
+	f->VFSTable.seekp(0, std::ios_base::beg);
 	
 	int clusterStatus = 0;
 	int currentLine = 0;
 	std::string buff;
 
-	while (!serviceStream.eof()) {
+	while (!f->VFSTable.eof()) {
 		
-		serviceStream >> clusterStatus;
+		f->VFSTable >> clusterStatus;
 
 		if (currentLine > from) {
 				if (clusterStatus == TestTask::clusterIsEmpty)
@@ -316,9 +338,9 @@ int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) {
 	}
 	
 
-	serviceStream.seekp(0, std::ios_base::end);
-	serviceStream.clear();
-	serviceStream << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
+	f->VFSTable.seekp(0, std::ios_base::end);
+	f->VFSTable.clear();
+	f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
 
 	return currentLine;
 }
@@ -328,34 +350,34 @@ int findEmptyCluster(const std::filesystem::path& VFSPath, int from = 0) {
 /// </summary>
 /// <param name="VFSPath"> - Путь к VFS</param>
 /// <param name="info"> - Информация для записи</param>
-void refreshVFSHeader(const std::filesystem::path& VFSPath, const VFSInfo& info) {
+void refreshVFSHeader(TestTask::File* f, const VFSInfo& info) {
 	// пока что обновляется только позиция первого свободного кластера
 	// с расширением возможностей VFS можно обновлять и другие данные
 
 	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
 
-	std::fstream header;
-	header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
-	if (!header.good()) {
-		header.close();
-		throw  std::runtime_error("Couldnt open VFS header\n");
+	if (f->VFSHeader.bad()) {
+		throw  std::runtime_error("Error while working with VFS header\n");
 	}
+
+	f->VFSHeader.clear();
+	f->VFSHeader.seekp(0, std::ios_base::beg);
+
 	
 	std::string buff;
 	int pointerPos = 0;
 	
-	while (buff.find(TestTask::endOfVFSInfo) == std::string::npos && !header.eof() && std::getline(header, buff)) {
+	while (buff.find(TestTask::endOfVFSInfo) == std::string::npos && !f->VFSHeader.eof() && std::getline(f->VFSHeader, buff)) {
 
-		 if (buff.find(TestTask::firstEmptyClusterMark) != std::string::npos) { // работает - не чини
-			header.seekp(pointerPos, std::ios::beg);
-			header << TestTask::firstEmptyClusterMark + std::string(TestTask::maxSettingLength - TestTask::firstEmptyClusterMark.length(), ' ');
-			header << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << info.FirstEmptyCluster;
-			header << '\n';
+		if (buff.find(TestTask::firstEmptyClusterMark) != std::string::npos) { // работает - не чини
+			f->VFSHeader.seekp(pointerPos, std::ios::beg);
+			f->VFSHeader << TestTask::firstEmptyClusterMark + std::string(TestTask::maxSettingLength - TestTask::firstEmptyClusterMark.length(), ' ');
+			f->VFSHeader << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << info.FirstEmptyCluster;
+			f->VFSHeader << '\n';
 			break;
 		}
-		pointerPos = header.tellp();
+		pointerPos = f->VFSHeader.tellp();
  	}
-	header.close();
 }
 
 /// <summary>
@@ -364,53 +386,50 @@ void refreshVFSHeader(const std::filesystem::path& VFSPath, const VFSInfo& info)
 /// <param name="VFSPath"> - Путь к VFS</param>
 /// <param name="clusterNumber"> - Откуда ссылаемся</param>
 /// <param name="changeTo"> - Куда ссылаемся</param>
-void changeClusterAssigment(const std::filesystem::path& VFSPath, int clusterNumber, int changeTo) {
+void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) {
 
-	std::lock_guard tableGuard(TestTask::VFSTableAccess); // блокируем VFS
-	
 	if (clusterNumber < 0) {
 		throw  std::runtime_error("Invalid cluster number\n");
 	}
 
-	std::fstream serviceStream;
-	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
-	
-	if (!serviceStream.good()) {
-		serviceStream.close();
-		throw  std::runtime_error("Couldnt open VFS Table\n");
+	std::lock_guard tableGuard(TestTask::VFSTableAccess); // блокируем VFS
+
+	if (f->VFSTable.bad()) {
+		throw  std::runtime_error("Error while working with VFS table\n");
 	}
+
+	f->VFSTable.clear();
+	f->VFSTable.seekp(0, std::ios_base::beg);
 
 	int currentCluster = 0;
 	int pointerPos = 0;
 	std::string buff;
 
-	while (std::getline(serviceStream,buff)) {
+	while (std::getline(f->VFSTable,buff)) {
 		
 		int currentAssigment = std::stoi(buff);
 
 		if (currentCluster == clusterNumber) {
-			serviceStream.seekp(pointerPos, std::ios::beg);
-			serviceStream.clear();
+			f->VFSTable.seekp(pointerPos, std::ios::beg);
+			f->VFSTable.clear();
 
 			if (changeTo >= 0) {
-				serviceStream << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << changeTo << '\n';
+				f->VFSTable << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << changeTo << '\n';
 			}
 			else {
-				serviceStream << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(changeTo) << '\n';
+				f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(changeTo) << '\n';
 			}
 			break;
 		}
 		++currentCluster;
-		pointerPos = serviceStream.tellp();
+		pointerPos = f->VFSTable.tellp();
 	}
 
-	if (currentCluster == clusterNumber && serviceStream.eof() && changeTo == TestTask::clusterIsEmpty) { // если нужно проставить метку пустого кластера в конец файла 
-		serviceStream.clear();
-		serviceStream.seekp(0, std::ios::end);
-		serviceStream << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
+	if (currentCluster == clusterNumber && f->VFSTable.eof() && changeTo == TestTask::clusterIsEmpty) { // если нужно проставить метку пустого кластера в конец файла 
+		f->VFSTable.clear();
+		f->VFSTable.seekp(0, std::ios::end);
+		f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
 	}
-
-	serviceStream.close();
 
 	if (currentCluster < clusterNumber) {
 		throw  std::runtime_error("Error while changing cluster assigment\n");
@@ -423,31 +442,29 @@ void changeClusterAssigment(const std::filesystem::path& VFSPath, int clusterNum
 /// <param name="VFSPath"> - Путь к VFS</param>
 /// <param name="cluster"> - Текущий кластер</param>
 /// <returns>Номер следующего кластера</returns>
-int findNextCluster(const std::filesystem::path& VFSPath, int cluster) { // переходим по ссылку на следующий кластер 
+int findNextCluster(TestTask::File* f) { // переходим по ссылку на следующий кластер 
 
 	std::lock_guard tableGuard(TestTask::VFSTableAccess);
 
-	std::fstream serviceStream;
-	serviceStream.open(VFSPath / TestTask::VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
-	if (!serviceStream.good()) {
-		serviceStream.close();
-		throw  std::runtime_error("Couldnt open VFS Table\n");
+	if (f->VFSTable.bad()) {
+		throw  std::runtime_error("Error while working with VFS table\n");
 	}
+
+	f->VFSTable.clear();
+	f->VFSTable.seekp(0, std::ios_base::beg);
 
 	int clusterAssigment = 0;
 	int currentLine = 0;
 
-	while (!serviceStream.eof()) {
+	while (!f->VFSTable.eof()) {
 
-		serviceStream >> clusterAssigment;
+		f->VFSTable >> clusterAssigment;
 
-		if (currentLine == cluster) {
+		if (currentLine == f->currentCluster) {
 				return clusterAssigment;
 		}
 		++currentLine;
 	}
-
-	serviceStream.close();
 
 	return TestTask::didNotFindCluster;
 }
@@ -459,34 +476,31 @@ int findNextCluster(const std::filesystem::path& VFSPath, int cluster) { // пе
 /// <param name="fileName"> - Имя файла</param>
 /// <param name="mode"> - Режим, в котором будет открыт файл</param>
 /// <returns>Номер первого кластера файла</returns>
-int addFileToVFS(const std::filesystem::path& VFSPath, const std::string& fileName, const std::string& mode) { // добавляем файл в VFS
+int addFileToVFS(TestTask::File* f, const std::string& mode) { // добавляем файл в VFS
 
 	try {
 		
-
-		VFSInfo info = getVFSInfo(VFSPath);
+		VFSInfo info = getVFSInfo(f);
 
 		int currentEmptyCluster = info.FirstEmptyCluster;
-		int nextEmptyCluster = findEmptyCluster(VFSPath, info.FirstEmptyCluster);
+		int nextEmptyCluster = findEmptyCluster(f, info.FirstEmptyCluster);
 		info.FirstEmptyCluster = nextEmptyCluster;
 
-		refreshVFSHeader(VFSPath, info);
-		changeClusterAssigment(VFSPath, currentEmptyCluster, TestTask::endOfFile);
-		changeClusterAssigment(VFSPath, nextEmptyCluster, TestTask::clusterIsEmpty);
+		refreshVFSHeader(f, info);
+		changeClusterAssigment(f, currentEmptyCluster, TestTask::endOfFile);
+		changeClusterAssigment(f, nextEmptyCluster, TestTask::clusterIsEmpty);
 
 		std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS (важно после refreshVFSHeader)
-		std::fstream header;
-		header.open(VFSPath / TestTask::VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::ate | std::ios::binary);
-		if (!header.good()) {
-			header.close();
-			throw  std::runtime_error("Couldnt open VFS Header\n");
+		
+		if (f->VFSHeader.bad()) {
+			throw  std::runtime_error("Error while working with VFS header\n");
 		}
 
-		header.seekp(0, std::ios_base::end);
-		FileInfo fileInfo(fileName, currentEmptyCluster, mode, 1);
+		f->VFSHeader.clear();
+		f->VFSHeader.seekp(0, std::ios_base::end);
+		FileInfo fileInfo(f->getFilePath(), currentEmptyCluster, mode, 1);
 		
-		header << fileInfo;
-		header.close();
+		f->VFSHeader << fileInfo;
 
 		return currentEmptyCluster;
 	}
@@ -512,22 +526,23 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 		return nullptr;
 	}
 
-	VFSInfo info = getVFSInfo(VFSPath);
+	File* file = new File(VFSPath,filePath,FileStatus::ReadOnly);
+
+	VFSInfo info = getVFSInfo(file);
 
 	if (!info) {
 		return nullptr;
 	}
 
-	File* file = nullptr;
-
 	try {
 
-		int fileCluster = openFileThread(VFSPath, filePath, ReadOnlyMark);
+		int fileCluster = openFileThread(file, ReadOnlyMark);
 		if (fileCluster == TestTask::didNotFindCluster ) {
+			delete file;
 			return nullptr;
 		}
-
-		file = new File(VFSPath, filePath, fileCluster, info.clusterSize, FileStatus::ReadOnly);
+		file->finInit(info.clusterSize, fileCluster);
+		//file = new File(VFSPath, filePath, fileCluster, info.clusterSize, FileStatus::ReadOnly);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what();
@@ -555,21 +570,22 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 		VFSPath = VFSInit(filePath);
 	}
 
-	VFSInfo info = getVFSInfo(VFSPath);
+	File* file = new File(VFSPath, filePath, FileStatus::WriteOnly);
+
+	VFSInfo info = getVFSInfo(file);
 
 	if (!info) {
 		return nullptr;
 	}
-	
-	File* file = nullptr;
 
 	try {
-		int fileCluster = openFileThread(VFSPath, filePath, TestTask::WriteOnlyMark);
+		int fileCluster = openFileThread(file, TestTask::WriteOnlyMark);
 
 		if (fileCluster == TestTask::didNotFindCluster) {
-			fileCluster = addFileToVFS(VFSPath, filePath, TestTask::WriteOnlyMark);
+			fileCluster = addFileToVFS(file, TestTask::WriteOnlyMark);
 		}
-		file = new File(VFSPath, filePath, fileCluster, info.clusterSize, FileStatus::WriteOnly);
+		file->finInit(info.clusterSize, fileCluster);
+		//file = new File(VFSPath, filePath, fileCluster, info.clusterSize, FileStatus::WriteOnly);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what();
@@ -582,47 +598,46 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 
 size_t TestTask::textFS::Read(File* f, char* buff, size_t len) {
 
-	if (!f) { 
+	if (!f || f->VFSData.bad()) {
 		return 0;
 	}
 
-	if (f->status!=FileStatus::ReadOnly) {
+	if (f->getStatus()!=FileStatus::ReadOnly) {
 		return 0;
 	}
 
-	std::ifstream inputStream;
-	inputStream.open(f->VFSPath/TestTask::VFSDataFileName, std::ios::binary);
-	inputStream.seekg(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
+	
 
-	size_t maxLength = f->clusterSize - f->indicatorPosition; // максимальное количество символов, которое может поместиться в текущий кластер
+	size_t clusterSize = f->getClusterSize();
+	size_t maxLength = clusterSize - f->indicatorPosition; // максимальное количество символов, которое может поместиться в текущий кластер
 	size_t textLength = maxLength >= len ? len : maxLength;
 
-	inputStream.read(buff, textLength);
+	f->VFSData.seekg(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
+	f->VFSData.read(buff, textLength);
 	size_t symbolsRead = textLength;
 	f->indicatorPosition += symbolsRead;
 
 	while (symbolsRead < len) {
 
 		try {
-			f->currentCluster = findNextCluster(f->VFSPath, f->currentCluster);
+			f->currentCluster = findNextCluster(f);
 			f->indicatorPosition = 0;
 
 			if (f->currentCluster == TestTask::endOfFile) {
-				f->status = FileStatus::EndOfFile;
-				break;
+				f->setEOFStatus();
 			}
 			else if (f->currentCluster == TestTask::didNotFindCluster ||
 					 f->currentCluster == TestTask::faultyCluster) {
 
-				f->status = FileStatus::Bad;
+				f->setBadStatus();
 				break;
 			}
 
-			inputStream.seekg(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
-			maxLength = f->clusterSize;
-			textLength = f->clusterSize >= len - symbolsRead ? len - symbolsRead : f->clusterSize;
+			f->VFSData.seekg(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
+			maxLength = clusterSize;
+			textLength = clusterSize >= len - symbolsRead ? len - symbolsRead : clusterSize;
 
-			inputStream.read(buff + symbolsRead, textLength);
+			f->VFSData.read(buff + symbolsRead, textLength);
 			symbolsRead += textLength;
 			f->indicatorPosition += symbolsRead;
 		}
@@ -631,7 +646,6 @@ size_t TestTask::textFS::Read(File* f, char* buff, size_t len) {
 			break;
 		}
 	}
-	inputStream.close();
 	return symbolsRead;
 }
 
@@ -640,38 +654,38 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 		return 0;
 	}
 
-	if (f->status != FileStatus::WriteOnly) {
+	if (f->getStatus() != FileStatus::WriteOnly) {
 		return 0;
 	}
 
-	std::ofstream outputStream;
-	outputStream.open(f->VFSPath / TestTask::VFSDataFileName, std::ios::in | std::ios::out | std::ios::binary);
-	outputStream.seekp(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
+	size_t clusterSize = f->getClusterSize();
+	f->VFSData.seekg(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
+	f->VFSData.seekp(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
 
-	size_t maxLength = f->clusterSize - f->indicatorPosition; // максимальное количество символов, которое может поместиться в текущий кластер
+	size_t maxLength = clusterSize - f->indicatorPosition; // максимальное количество символов, которое может поместиться в текущий кластер
 	size_t textLength = maxLength >= len ? len : maxLength;
 
-	outputStream.write(buff, textLength);
+	f->VFSData.write(buff, textLength);
 	size_t symbolsWritten = textLength;
 	f->indicatorPosition += symbolsWritten;
 
 	while (symbolsWritten < len) {
 		try {
-			int nextCluster = findNextCluster(f->VFSPath, f->currentCluster);
+			int nextCluster = findNextCluster(f);
 			if (nextCluster == TestTask::endOfFile) { // если все кластеры под данный файл закончились, то выделяем новый
 
 				//std::lock_guard(TestTask::VFSCritical);
 
-				VFSInfo info = getVFSInfo(f->VFSPath);
+				VFSInfo info = getVFSInfo(f);
 
 				int currentEmptyCluster = info.FirstEmptyCluster;
-				int nextEmptyCluster = findEmptyCluster(f->VFSPath, info.FirstEmptyCluster);
+				int nextEmptyCluster = findEmptyCluster(f, info.FirstEmptyCluster);
 				info.FirstEmptyCluster = nextEmptyCluster;
 
-				refreshVFSHeader(f->VFSPath, info);
-				changeClusterAssigment(f->VFSPath, f->currentCluster, currentEmptyCluster); // с текущего ссылаемся на только что выделенный
-				changeClusterAssigment(f->VFSPath, currentEmptyCluster, TestTask::endOfFile); // только что выделенный помечаем как конец файла
-				changeClusterAssigment(f->VFSPath, nextEmptyCluster, TestTask::clusterIsEmpty); // следующий пустой кластер помечаем как пустой
+				refreshVFSHeader(f, info);
+				changeClusterAssigment(f, f->currentCluster, currentEmptyCluster); // с текущего ссылаемся на только что выделенный
+				changeClusterAssigment(f, currentEmptyCluster, TestTask::endOfFile); // только что выделенный помечаем как конец файла
+				changeClusterAssigment(f, nextEmptyCluster, TestTask::clusterIsEmpty); // следующий пустой кластер помечаем как пустой
 				nextCluster = currentEmptyCluster;
 			}
 			else if (nextCluster == TestTask::didNotFindCluster) { // не нашли следующий кластер
@@ -681,11 +695,11 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 			f->currentCluster = nextCluster;
 			f->indicatorPosition = 0;
 
-			outputStream.seekp(f->currentCluster * f->clusterSize + f->indicatorPosition, std::ios::beg);
-			maxLength = f->clusterSize;
-			textLength = f->clusterSize >= len - symbolsWritten ? len - symbolsWritten : f->clusterSize;
+			f->VFSData.seekp(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
+			maxLength = clusterSize;
+			textLength = clusterSize >= len - symbolsWritten ? len - symbolsWritten : clusterSize;
 
-			outputStream.write(buff + symbolsWritten, textLength);
+			f->VFSData.write(buff + symbolsWritten, textLength);
 			symbolsWritten += textLength;
 			f->indicatorPosition += textLength;
 		}
@@ -694,7 +708,6 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 			break;
 		}
 	}
-	outputStream.close();
 	return symbolsWritten;
 }
 
@@ -704,12 +717,13 @@ void TestTask::textFS::Close(File* f) {
 		return;
 	}
 
-	f->currentCluster = f->firstCluster;
-	f->status = FileStatus::Closed;
+	f->currentCluster = f->getFirstCluster();
+	f->setClosedStatus();
 	f->indicatorPosition = 0;
 
 	try {
-		closeFileThread(f->VFSPath, f->filePath);
+		closeFileThread(f);
+		delete f;
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what();
