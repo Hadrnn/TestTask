@@ -11,8 +11,14 @@ TestTask::File::File(std::filesystem::path VFSpath_, std::string filePath_, File
 	VFSHeader.open(VFSpath_ / VFSHeaderFileName, std::ios::in | std::ios::out | std::ios::binary);
 	VFSTable.open(VFSpath_ / VFSTableFileName, std::ios::in | std::ios::out | std::ios::binary);
 	VFSData.open(VFSpath_ / VFSDataFileName, std::ios::in | std::ios::out | std::ios::binary);
-}
 
+	if (VFSHeader.bad() || VFSTable.bad() || VFSData.bad()) {
+		VFSHeader.close();
+		VFSTable.close();
+		VFSData.close();
+		throw std::runtime_error("Could not open VFS\n");
+	}
+}
 
 TestTask::File::~File() {
 	VFSHeader.close();
@@ -134,36 +140,19 @@ std::filesystem::path VFSInit(const std::string& filePath) {
 /// <returns>Путь к папке с VFS</returns>
 std::filesystem::path findVFSPath(const std::string& filePath) { 
 
-	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
-	std::lock_guard tableGuard(TestTask::VFSTableAccess);
-
 	std::filesystem::path VFSPath(filePath);
 
 	if (VFSPath.empty())
 		throw std::runtime_error("Empty path to VFS\n");
+
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);
 
 	while (VFSPath != VFSPath.root_path()) { // в filePath ищем папку, в которой инициализирована VFS
 		VFSPath = VFSPath.parent_path();
 		if (std::filesystem::exists(VFSPath / TestTask::VFSHeaderFileName) &&
 			std::filesystem::exists(VFSPath / TestTask::VFSTableFileName) && 
 			std::filesystem::exists(VFSPath / TestTask::VFSDataFileName)) {
-
-			std::ifstream serviceStream;  // проверяем целостность файлов
-			
-			serviceStream.open(VFSPath / TestTask::VFSHeaderFileName);
-			if(!serviceStream.good())
-				throw std::runtime_error("Could not open VFS Header\n");
-			serviceStream.close();
-
-			serviceStream.open(VFSPath / TestTask::VFSTableFileName);
-			if (!serviceStream.good())
-				throw std::runtime_error("Could not open VFS Table\n");
-			serviceStream.close();
-
-			serviceStream.open(VFSPath / TestTask::VFSDataFileName);
-			if (!serviceStream.good())
-				throw std::runtime_error("Could not open VFS Data file\n");
-			serviceStream.close();
 
 			return VFSPath;
 		}
@@ -179,20 +168,24 @@ std::filesystem::path findVFSPath(const std::string& filePath) {
 /// <summary>
 /// Получение информации о VFS из VFSHeader
 /// </summary>
-/// <param name="VFSPath"> - Путь к папке с VFS</param>
+/// <param name="f"> - File</param>
 /// <returns>VFSInfo</returns>
 VFSInfo getVFSInfo(TestTask::File* f) {
 
-	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);
+	if (!f) {
+		throw  std::runtime_error("Trying to get info from an empty File\n");
+	}
+
 	if (f->VFSHeader.bad()) {
 		throw  std::runtime_error("Error while working with VFS header\n");
 	}
+
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess); 
 
 	f->VFSHeader.clear();
 	f->VFSHeader.seekg(0, std::ios_base::beg);
 
 	std::string buff;
-
 	VFSInfo info;
 	
 	std::getline(f->VFSHeader, buff);
@@ -223,29 +216,26 @@ VFSInfo getVFSInfo(TestTask::File* f) {
 /// <summary>
 /// Поиск начального кластера файла и отметка об открытии File
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
-/// <param name="fileName"> - Путь к файлу</param>
+/// <param name="f"> - File</param>
 /// <param name="mode"> - режим, в котором будет открыт файл</param>
 /// <returns>Номер начального кластера файла</returns>
-int openFileThread(TestTask::File* f , const std::string& mode) {
+int openFileThread(TestTask::File* f, const std::string& mode) {
 	
-	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
-
 	if (f->VFSHeader.bad()) {
 		throw  std::runtime_error("Error while working with VFS header\n");
 	}
+
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
 
 	f->VFSHeader.clear();
 	f->VFSHeader.seekg(0, std::ios_base::beg);
 
 	std::string buff;
-
 	int pointerPos = 0;
 	FileInfo info(f->getFilePath());
 
 	while (std::getline(f->VFSHeader, buff)) { // ищем нужный файл в header
 		if (buff.find(f->getFilePath()) != std::string::npos) { // нашли
-
 			
 			f->VFSHeader.seekg(pointerPos, std::ios_base::beg);
 			f->VFSHeader >> info;
@@ -273,23 +263,24 @@ int openFileThread(TestTask::File* f , const std::string& mode) {
 /// <summary>
 /// Отметка о закрытии File
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
-/// <param name="fileName"> - Путь к файлу</param>
+/// <param name="f"> - File</param>
 void closeFileThread(TestTask::File*f ) { 
 
-	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+	if (!f || !*f) {
+		return;
+	}
 
 	if (f->VFSHeader.bad()) {
 		throw  std::runtime_error("Error while working with VFS header\n");
 	}
 
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+
 	f->VFSHeader.clear();
 	f->VFSHeader.seekp(0, std::ios_base::beg);
 	f->VFSHeader.seekg(0, std::ios_base::beg);
 
-
 	std::string buff;
-
 	int pointerPos = 0;
 	FileInfo info(f->getFilePath());
 
@@ -314,21 +305,24 @@ void closeFileThread(TestTask::File*f ) {
 /// <summary>
 /// Поиск самого ближнего к from свободного кластера 
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="f"> - file</param>
 /// <param name="from"> - С какого кластера начинать поиск</param>
 /// <returns>Номер свободного кластера</returns>
 int findEmptyCluster(TestTask::File* f, int from = 0) { 
 
-	std::lock_guard tableGuard(TestTask::VFSTableAccess);// блокируем VFS
+	if (!f) {
+		throw  std::runtime_error("Trying to get info from an empty File\n");
+	}
 
 	if (f->VFSTable.bad()) {
 		throw  std::runtime_error("Error while working with VFS table\n");
 	}
 
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);// блокируем VFS
+
 	f->VFSTable.clear();
 	f->VFSTable.seekg(0, std::ios_base::beg);
 	f->VFSTable.seekp(0, std::ios_base::beg);
-
 	
 	int clusterStatus = 0;
 	int currentLine = 0;
@@ -345,7 +339,6 @@ int findEmptyCluster(TestTask::File* f, int from = 0) {
 		++currentLine;
 	}
 	
-
 	f->VFSTable.seekp(0, std::ios_base::end);
 	f->VFSTable.clear();
 	f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
@@ -357,24 +350,26 @@ int findEmptyCluster(TestTask::File* f, int from = 0) {
 /// <summary>
 /// Обновление информации в Header 
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="f"> - File</param>
 /// <param name="info"> - Информация для записи</param>
 void refreshVFSHeader(TestTask::File* f, const VFSInfo& info) {
 	// пока что обновляется только позиция первого свободного кластера
 	// с расширением возможностей VFS можно обновлять и другие данные
 
-	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+	if (!f) {
+		throw  std::runtime_error("Trying to get info from an empty File\n");
+	}
 
 	if (f->VFSHeader.bad()) {
 		throw  std::runtime_error("Error while working with VFS header\n");
 	}
 
+	std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS
+
 	f->VFSHeader.clear();
 	f->VFSHeader.seekp(0, std::ios_base::beg);
 	f->VFSHeader.seekg(0, std::ios_base::beg);
 
-
-	
 	std::string buff;
 	int pointerPos = 0;
 	
@@ -395,7 +390,7 @@ void refreshVFSHeader(TestTask::File* f, const VFSInfo& info) {
 /// <summary>
 /// Переназначение ссылки на следующий кластер
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
+/// <param name="f"> - File</param>
 /// <param name="clusterNumber"> - Откуда ссылаемся</param>
 /// <param name="changeTo"> - Куда ссылаемся</param>
 void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) {
@@ -404,16 +399,19 @@ void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) 
 		throw  std::runtime_error("Invalid cluster number\n");
 	}
 
-	std::lock_guard tableGuard(TestTask::VFSTableAccess); // блокируем VFS
+	if (!f) {
+		throw  std::runtime_error("Trying to get info from an empty File\n");
+	}
 
 	if (f->VFSTable.bad()) {
 		throw  std::runtime_error("Error while working with VFS table\n");
 	}
 
+	std::lock_guard tableGuard(TestTask::VFSTableAccess); // блокируем VFS
+
 	f->VFSTable.clear();
 	f->VFSTable.seekp(0, std::ios_base::beg);
 	f->VFSTable.seekg(0, std::ios_base::beg);
-
 
 	int currentCluster = 0;
 	int pointerPos = 0;
@@ -455,21 +453,23 @@ void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) 
 /// <summary>
 /// Поиск следующего кластера
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
-/// <param name="cluster"> - Текущий кластер</param>
+/// <param name="f"> - File</param>
 /// <returns>Номер следующего кластера</returns>
-int findNextCluster(TestTask::File* f) { // переходим по ссылку на следующий кластер 
+int findNextCluster(TestTask::File* f) {
 
-	std::lock_guard tableGuard(TestTask::VFSTableAccess);
+	if (!f) {
+		throw  std::runtime_error("Trying to get info from an empty File\n");
+	}
 
 	if (f->VFSTable.bad()) {
 		throw  std::runtime_error("Error while working with VFS table\n");
 	}
 
+	std::lock_guard tableGuard(TestTask::VFSTableAccess);
+
 	f->VFSTable.clear();
 	f->VFSTable.seekp(0, std::ios_base::beg);
 	f->VFSTable.seekg(0, std::ios_base::beg);
-
 
 	int clusterAssigment = 0;
 	int currentLine = 0;
@@ -490,8 +490,7 @@ int findNextCluster(TestTask::File* f) { // переходим по ссылку
 /// <summary>
 /// Добавление файла в VFS
 /// </summary>
-/// <param name="VFSPath"> - Путь к VFS</param>
-/// <param name="fileName"> - Имя файла</param>
+/// <param name="f"> - File</param>
 /// <param name="mode"> - Режим, в котором будет открыт файл</param>
 /// <returns>Номер первого кластера файла</returns>
 int addFileToVFS(TestTask::File* f, const std::string& mode) { // добавляем файл в VFS
@@ -508,11 +507,11 @@ int addFileToVFS(TestTask::File* f, const std::string& mode) { // добавля
 		changeClusterAssigment(f, currentEmptyCluster, TestTask::endOfFile);
 		changeClusterAssigment(f, nextEmptyCluster, TestTask::clusterIsEmpty);
 
-		std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS (важно после refreshVFSHeader)
-		
 		if (f->VFSHeader.bad()) {
 			throw  std::runtime_error("Error while working with VFS header\n");
 		}
+
+		std::lock_guard headerGuard(TestTask::VFSHeaderAccess);// блокикуем VFS (важно делать после refreshVFSHeader)
 
 		f->VFSHeader.clear();
 		f->VFSHeader.seekp(0, std::ios_base::end);
@@ -554,14 +553,12 @@ TestTask::File* TestTask::textFS::Open(const char* name) {
 	}
 
 	try {
-
 		int fileCluster = openFileThread(file, ReadOnlyMark);
 		if (fileCluster == TestTask::didNotFindCluster ) {
 			delete file;
 			return nullptr;
 		}
 		file->finInit(info.clusterSize, fileCluster);
-		//file = new File(VFSPath, filePath, fileCluster, info.clusterSize, FileStatus::ReadOnly);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what();
@@ -604,7 +601,6 @@ TestTask::File* TestTask::textFS::Create(const char* name) {
 			fileCluster = addFileToVFS(file, TestTask::WriteOnlyMark);
 		}
 		file->finInit(info.clusterSize, fileCluster);
-		//file = new File(VFSPath, filePath, fileCluster, info.clusterSize, FileStatus::WriteOnly);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what();
@@ -625,8 +621,6 @@ size_t TestTask::textFS::Read(File* f, char* buff, size_t len) {
 		return 0;
 	}
 
-	
-
 	size_t clusterSize = f->getClusterSize();
 	size_t maxLength = clusterSize - f->indicatorPosition; // максимальное количество символов, которое может поместиться в текущий кластер
 	size_t textLength = maxLength >= len ? len : maxLength;
@@ -645,8 +639,9 @@ size_t TestTask::textFS::Read(File* f, char* buff, size_t len) {
 			if (f->currentCluster == TestTask::endOfFile) {
 				f->setEOFStatus();
 			}
-			else if (f->currentCluster == TestTask::didNotFindCluster ||
-					 f->currentCluster == TestTask::faultyCluster) {
+			else
+			if (f->currentCluster == TestTask::didNotFindCluster ||
+				f->currentCluster == TestTask::faultyCluster) {
 
 				f->setBadStatus();
 				break;
@@ -691,8 +686,6 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 		try {
 			int nextCluster = findNextCluster(f);
 			if (nextCluster == TestTask::endOfFile) { // если все кластеры под данный файл закончились, то выделяем новый
-
-				//std::lock_guard(TestTask::VFSCritical);
 
 				VFSInfo info = getVFSInfo(f);
 
