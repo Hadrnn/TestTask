@@ -188,7 +188,8 @@ VFSInfo getVFSInfo(TestTask::File* f) {
 	}
 
 	f->VFSHeader.clear();
-	f->VFSHeader.seekp(0, std::ios_base::beg);
+	f->VFSHeader.seekg(0, std::ios_base::beg);
+
 	std::string buff;
 
 	VFSInfo info;
@@ -234,7 +235,7 @@ int openFileThread(TestTask::File* f , const std::string& mode) {
 	}
 
 	f->VFSHeader.clear();
-	f->VFSHeader.seekp(0, std::ios_base::beg);
+	f->VFSHeader.seekg(0, std::ios_base::beg);
 
 	std::string buff;
 
@@ -258,6 +259,7 @@ int openFileThread(TestTask::File* f , const std::string& mode) {
 				f->VFSHeader.clear();
 				f->VFSHeader.seekp(pointerPos, std::ios_base::beg);
 				f->VFSHeader << info; // перед этим увеличилии количество рабочих потоков (см. несколько строк выше)
+				f->VFSHeader.flush();
 				return info.firstCluster;
 			}
 		}
@@ -282,6 +284,8 @@ void closeFileThread(TestTask::File*f ) {
 
 	f->VFSHeader.clear();
 	f->VFSHeader.seekp(0, std::ios_base::beg);
+	f->VFSHeader.seekg(0, std::ios_base::beg);
+
 
 	std::string buff;
 
@@ -299,6 +303,7 @@ void closeFileThread(TestTask::File*f ) {
 			f->VFSHeader.clear();
 			f->VFSHeader.seekp(pointerPos, std::ios_base::beg);
 			f->VFSHeader << info;
+			f->VFSHeader.flush();
 			return;
 		}
 		pointerPos = f->VFSHeader.tellp();
@@ -320,7 +325,9 @@ int findEmptyCluster(TestTask::File* f, int from = 0) {
 	}
 
 	f->VFSTable.clear();
+	f->VFSTable.seekg(0, std::ios_base::beg);
 	f->VFSTable.seekp(0, std::ios_base::beg);
+
 	
 	int clusterStatus = 0;
 	int currentLine = 0;
@@ -341,6 +348,7 @@ int findEmptyCluster(TestTask::File* f, int from = 0) {
 	f->VFSTable.seekp(0, std::ios_base::end);
 	f->VFSTable.clear();
 	f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
+	f->VFSTable.flush();
 
 	return currentLine;
 }
@@ -362,6 +370,8 @@ void refreshVFSHeader(TestTask::File* f, const VFSInfo& info) {
 
 	f->VFSHeader.clear();
 	f->VFSHeader.seekp(0, std::ios_base::beg);
+	f->VFSHeader.seekg(0, std::ios_base::beg);
+
 
 	
 	std::string buff;
@@ -374,6 +384,7 @@ void refreshVFSHeader(TestTask::File* f, const VFSInfo& info) {
 			f->VFSHeader << TestTask::firstEmptyClusterMark + std::string(TestTask::maxSettingLength - TestTask::firstEmptyClusterMark.length(), ' ');
 			f->VFSHeader << std::setw(TestTask::maxClusterDigits) << std::setfill('0') << info.FirstEmptyCluster;
 			f->VFSHeader << '\n';
+			f->VFSHeader.flush();
 			break;
 		}
 		pointerPos = f->VFSHeader.tellp();
@@ -400,6 +411,8 @@ void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) 
 
 	f->VFSTable.clear();
 	f->VFSTable.seekp(0, std::ios_base::beg);
+	f->VFSTable.seekg(0, std::ios_base::beg);
+
 
 	int currentCluster = 0;
 	int pointerPos = 0;
@@ -419,6 +432,7 @@ void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) 
 			else {
 				f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(changeTo) << '\n';
 			}
+			f->VFSTable.flush();
 			break;
 		}
 		++currentCluster;
@@ -429,6 +443,7 @@ void changeClusterAssigment(TestTask::File* f, int clusterNumber, int changeTo) 
 		f->VFSTable.clear();
 		f->VFSTable.seekp(0, std::ios::end);
 		f->VFSTable << "-" << std::setw(TestTask::maxClusterDigits - 1) << std::setfill('0') << std::abs(TestTask::clusterIsEmpty) << '\n';
+		f->VFSTable.flush();
 	}
 
 	if (currentCluster < clusterNumber) {
@@ -452,6 +467,8 @@ int findNextCluster(TestTask::File* f) { // переходим по ссылку
 
 	f->VFSTable.clear();
 	f->VFSTable.seekp(0, std::ios_base::beg);
+	f->VFSTable.seekg(0, std::ios_base::beg);
+
 
 	int clusterAssigment = 0;
 	int currentLine = 0;
@@ -501,6 +518,7 @@ int addFileToVFS(TestTask::File* f, const std::string& mode) { // добавля
 		FileInfo fileInfo(f->getFilePath(), currentEmptyCluster, mode, 1);
 		
 		f->VFSHeader << fileInfo;
+		f->VFSHeader.flush();
 
 		return currentEmptyCluster;
 	}
@@ -659,7 +677,6 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 	}
 
 	size_t clusterSize = f->getClusterSize();
-	f->VFSData.seekg(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
 	f->VFSData.seekp(f->currentCluster * clusterSize + f->indicatorPosition, std::ios::beg);
 
 	size_t maxLength = clusterSize - f->indicatorPosition; // максимальное количество символов, которое может поместиться в текущий кластер
@@ -708,6 +725,7 @@ size_t TestTask::textFS::Write(File* f, char* buff, size_t len) {
 			break;
 		}
 	}
+	f->VFSData.flush();
 	return symbolsWritten;
 }
 
