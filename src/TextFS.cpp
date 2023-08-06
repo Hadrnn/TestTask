@@ -32,6 +32,7 @@ TestTask::File::operator bool() {
 void TestTask::File::finInit(int clusterSize_, int firstCluster_) {
 	clusterSize = clusterSize_;
 	firstCluster = firstCluster_;
+	currentCluster = firstCluster_;
 }
 
 struct VFSInfo { // структура, в которую будут записываться данные о VFS
